@@ -6,7 +6,6 @@ from .models import Task
 
 def task_list_view(request: HttpRequest):
     context = {
-        'tasks': Task.objects.all()
     }
     return render(request, 'notes/index.html', context=context)
 
