@@ -4,10 +4,12 @@ from django.http import HttpRequest
 from .models import Task
 
 
+def main_view(request: HttpRequest):
+    return render(request, 'notes/index.html')
+
+
 def task_list_view(request: HttpRequest):
-    context = {
-    }
-    return render(request, 'notes/index.html', context=context)
+    pass
 
 
 def task_create_view(request: HttpRequest):

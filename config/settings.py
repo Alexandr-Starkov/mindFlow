@@ -78,10 +78,14 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+database_dir = os.path.join(BASE_DIR, "sqlite_db")
+if not os.path.exists(database_dir):
+    os.makedirs(database_dir)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.path.join(database_dir, 'db.sqlite3'),
     }
 }
 
@@ -124,7 +128,6 @@ STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'assets'),
-    os.path.join(BASE_DIR, 'assets/images'),
 ]
 
 # Default primary key field type
