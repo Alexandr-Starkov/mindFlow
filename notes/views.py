@@ -8,6 +8,14 @@ def main_view(request: HttpRequest):
     return render(request, 'notes/index.html')
 
 
+def authorization_view(request: HttpRequest):
+    return render(request, 'notes/authorization.html')
+
+
+def registration_view(request: HttpRequest):
+    return render(request, 'notes/registration.html')
+
+
 def task_list_view(request: HttpRequest):
     pass
 
