@@ -4,22 +4,42 @@
 
 {% block main %}
     <div class="d-flex flex-column align-items-center">
-        <form class="form-signin">
-
+        <form class="form-login" id="auth-form" action="" method="post">
             <h1 class="h4 mb-3 fw-normal text-start">Login</h1>
             <div class="form-floating">
-                <input type="email" class="form-control" id="floatingInput" placeholder="name@example.com">
-                <label for="floatingInput">Email address</label>
+                <input
+                   type="text"
+                   class="form-control"
+                   id="authLogin"
+                   placeholder="Login"
+                   required
+                   minlength="3"
+                   maxlength="15"
+                   pattern="[a-zA-Zа-яА-Я]{3,15}"
+                   title="Логин должен содержать только буквы и быть от 3 до 15 символов">
+                <label for="authLogin">Login</label>
             </div>
 
             <div class="form-floating mb-2">
-                <input type="password" class="form-control" id="floatingPassword" placeholder="Password">
-                <label for="floatingPassword">Password</label>
+                <input
+                   type="password"
+                   class="form-control"
+                   id="authPassword"
+                   placeholder="Password"
+                   required
+                   minlength="3"
+                   maxlength="15"
+                   pattern="(?=.*[A-Z])[a-zA-Zа-яА-Я0-9]{3,15}"
+                   title="Пароль должен содержать символ верхнего регистра и быть длиной от 3 до 15 символов">
+                <label for="authPassword">Password</label>
             </div>
-
-            <button class="btn btn-primary w-100 py-2" type="submit">Login</button>
+            <button class="btn btn-primary w-100 py-2 mb-3" type="submit">Login</button>
+            <a href="{% url 'registration' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Not registered yet? Registration</a>
         </form>
-
-        <a href="{% url 'registration' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.800rem;">Not registered yet? Registration</a>
     </div>
+{% endblock %}
+
+{% block script %}
+    {% load static %}
+    <script src="{% static 'js/form-transfer.js' %}"></script>
 {% endblock %}

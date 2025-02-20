@@ -4,26 +4,53 @@
 
 {% block main %}
     <div class="d-flex flex-column align-items-center">
-        <form class="form-signin" id="form">
-
+        <form class="form-signin" id="regis-form" action="" method="post">
             <h1 class="h4 mb-3 fw-normal text-start">Please sign up</h1>
             <div class="form-floating">
-                <input type="email" class="form-control js-input js-input-email" id="floatingEmail" placeholder="name@example.com">
-                <label for="floatingEmail">Email address</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="regisLogin"
+                    placeholder="Login"
+                    required
+                    minlength="3"
+                    maxlength="15"
+                    pattern="[a-zA-Zа-яА-Я]{3,15}"
+                    title="Логин должен содержать только буквы и быть от 3 до 15 символов">
+                <label for="regisLogin">Login</label>
+            </div>
+
+            <div class="form-floating">
+                <input
+                    type="email"
+                    class="form-control"
+                    id="regisEmail"
+                    placeholder="name@example.com"
+                    required
+                    title="Введите действительный адрес электронной почты: example@mail.com">
+                <label for="regisEmail">Email address</label>
             </div>
 
             <div class="form-floating mb-2">
-                <input type="password" class="form-control js-input js-input-password" id="floatingPassword" placeholder="Password">
-                <label for="floatingPassword">Password</label>
+                <input
+                    type="password"
+                    class="form-control"
+                    id="regisPassword"
+                    placeholder="Password"
+                    required
+                    minlength="3"
+                    maxlength="15"
+                    pattern="(?=.*[A-Z])[a-zA-Zа-яА-Я0-9]{3,15}"
+                    title="Пароль должен содержать символ верхнего регистра и быть длиной от 3 до 15 символов">
+                <label for="regisPassword">Password</label>
             </div>
-
-            <button class="btn btn-primary w-100 py-2" type="submit">Sign up</button>
+            <button class="btn btn-primary w-100 py-2 mb-3" type="submit">Sign up</button>
+            <a href="{% url 'authorization' %}" class="text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Already have an account? Login</a>
         </form>
-        <a href="{% url 'authorization' %}" class="text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.800rem;">Already have an account? Login</a>
     </div>
 {% endblock %}
 
-{% load static %}
 {% block script %}
-    <script src="{% static 'js/form-validation.js' %}"></script>
+    {% load static %}
+    <script src="{% static 'js/form-transfer.js' %}"></script>
 {% endblock %}
