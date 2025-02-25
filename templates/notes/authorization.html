@@ -5,6 +5,7 @@
 {% block main %}
     <div class="d-flex flex-column align-items-center">
         <form class="form-login" id="auth-form" action="" method="post">
+            {% csrf_token %}
             <h1 class="h4 mb-3 fw-normal text-start">Login</h1>
             <div class="form-floating">
                 <input
@@ -41,5 +42,5 @@
 
 {% block script %}
     {% load static %}
-    <script src="{% static 'js/form-transfer.js' %}"></script>
+    <script src="{% static 'js/auth-form-transfer.js' %}"></script>
 {% endblock %}

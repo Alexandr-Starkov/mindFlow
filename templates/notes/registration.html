@@ -4,12 +4,13 @@
 
 {% block main %}
     <div class="d-flex flex-column align-items-center">
-        <form class="form-signin" id="regis-form" action="" method="post">
+        <form class="form-signin" id="regis-form" method="post" data-url="{% url 'registration_form' %}">
+            {% csrf_token %}
             <h1 class="h4 mb-3 fw-normal text-start">Please sign up</h1>
             <div class="form-floating">
                 <input
                     type="text"
-                    class="form-control"
+                    class="form-control js-input js-input-login"
                     id="regisLogin"
                     placeholder="Login"
                     required
@@ -23,7 +24,7 @@
             <div class="form-floating">
                 <input
                     type="email"
-                    class="form-control"
+                    class="form-control js-input js-input-email"
                     id="regisEmail"
                     placeholder="name@example.com"
                     required
@@ -34,7 +35,7 @@
             <div class="form-floating mb-2">
                 <input
                     type="password"
-                    class="form-control"
+                    class="form-control js-input js-input-password"
                     id="regisPassword"
                     placeholder="Password"
                     required
@@ -52,5 +53,5 @@
 
 {% block script %}
     {% load static %}
-    <script src="{% static 'js/form-transfer.js' %}"></script>
+    <script src="{% static 'js/regis-form-transfer.js' %}"></script>
 {% endblock %}
