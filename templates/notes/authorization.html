@@ -4,13 +4,13 @@
 
 {% block main %}
     <div class="d-flex flex-column align-items-center">
-        <form class="form-login" id="auth-form" action="" method="post">
+        <form class="form-login" id="auth-form" method="post" data-url="authorization_form">
             {% csrf_token %}
             <h1 class="h4 mb-3 fw-normal text-start">Login</h1>
             <div class="form-floating">
                 <input
                    type="text"
-                   class="form-control"
+                   class="form-control js-input js-input-login"
                    id="authLogin"
                    placeholder="Login"
                    required
@@ -24,23 +24,19 @@
             <div class="form-floating mb-2">
                 <input
                    type="password"
-                   class="form-control"
+                   class="form-control js-input js-input-password"
                    id="authPassword"
                    placeholder="Password"
-                   required
-                   minlength="3"
-                   maxlength="15"
-                   pattern="(?=.*[A-Z])[a-zA-Zа-яА-Я0-9]{3,15}"
-                   title="Пароль должен содержать символ верхнего регистра и быть длиной от 3 до 15 символов">
+                   required>
                 <label for="authPassword">Password</label>
             </div>
             <button class="btn btn-primary w-100 py-2 mb-3" type="submit">Login</button>
-            <a href="{% url 'registration' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Not registered yet? Registration</a>
+            <a href="{% url 'registration' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Forgot your password?</a>
         </form>
     </div>
 {% endblock %}
 
 {% block script %}
     {% load static %}
-    <script src="{% static 'js/auth-form-transfer.js' %}"></script>
+    <script type="module" src="{% static 'js/auth-form-transfer.js' %}"></script>
 {% endblock %}

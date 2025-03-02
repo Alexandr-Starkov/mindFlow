@@ -1,3 +1,5 @@
+import { getCookie } from './utilities.js';
+
 
 let form = document.querySelector('#regis-form'),
     // formInputs = document.querySelectorAll('.js-input'),
@@ -29,33 +31,17 @@ form.onsubmit = async function (event) {
         });
 
         let result = await response.json();
-
         if (response.ok) {
             console.log('Успех');
-            alert('Вы успешно зарегистрированы!');
-            window.location.href = result.redirect_url;
+            setTimeout(() => {
+                window.location.href = result.redirect_url;
+            }, 1000);
         } else {
             console.error('Ошибка', result);
-            alert('Ошибка регистрации. Проверьте введенные данные.');
+            alert(result.message || 'Ошибка регистрации. Проверьте введенные данные.');
         }
     } catch (error) {
         console.error('Ошибка', error);
         alert('Ошибка соединения с сервером. Попробуйте позже.');
     }
 };
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
