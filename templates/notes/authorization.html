@@ -4,34 +4,33 @@
 
 {% block main %}
     <div class="d-flex flex-column align-items-center">
-        <form class="form-login" id="auth-form" method="post" data-url="authorization_form">
+        <form class="form-signin" id="auth-form" method="post" data-url="{% url 'authorization_form' %}">
             {% csrf_token %}
             <h1 class="h4 mb-3 fw-normal text-start">Login</h1>
             <div class="form-floating">
                 <input
                    type="text"
-                   class="form-control js-input js-input-login"
+                   class="form-control js-input-login"
                    id="authLogin"
                    placeholder="Login"
                    required
                    minlength="3"
-                   maxlength="15"
-                   pattern="[a-zA-Zа-яА-Я]{3,15}"
-                   title="Логин должен содержать только буквы и быть от 3 до 15 символов">
+                   maxlength="20"
+                   pattern="[a-zA-Zа-яА-Я]{3,20}"
+                   title="Логин должен содержать только буквы и быть от 3 до 20 символов">
                 <label for="authLogin">Login</label>
             </div>
-
             <div class="form-floating mb-2">
                 <input
                    type="password"
-                   class="form-control js-input js-input-password"
+                   class="form-control js-input-password"
                    id="authPassword"
                    placeholder="Password"
                    required>
                 <label for="authPassword">Password</label>
             </div>
             <button class="btn btn-primary w-100 py-2 mb-3" type="submit">Login</button>
-            <a href="{% url 'registration' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Forgot your password?</a>
+            <a href="{% url 'password_reset' %}" class="d-block text-center link-body-emphasis text-decoration-none link-hover" style="font-size: 0.900rem;">Forgot your password?</a>
         </form>
     </div>
 {% endblock %}

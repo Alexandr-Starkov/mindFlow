@@ -26,6 +26,10 @@ main {
     padding-left: 30px;
 }
 
+.user-login {
+    color: var(--text-color);
+}
+
 footer {
     width: 100%;
 }
@@ -43,11 +47,10 @@ footer {
     opacity: 0.7;
 }
 
-.form-signin,
-.form-login {
+.form-signin {
     background: var(--container-bg);
-    max-height: 380px;
-    max-width: 380px;
+    max-height: 360px;
+    max-width: 360px;
     padding: 1rem;
     text-align: center;
     border-radius: 8px;
