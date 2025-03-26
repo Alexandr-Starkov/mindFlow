@@ -1,3 +1,4 @@
+<!doctype html>
 <html lang="en-EN">
 <head>
     <meta charset="UTF-8">
@@ -56,8 +57,8 @@
         {% block header %}
         {% endblock %}
     </header>
-
-    <main class="d-flex justify-content-center align-items-center {% block main_class %}default-class{% endblock %}">
+    {# Main #}
+    <main class="{% block main_class %}main-class{% endblock %}">
         {% block main %}
         {% endblock %}
     </main>
@@ -77,22 +78,22 @@
                     <ul class="nav list-unstyled d-flex">
                         <li class="ms-3">
                             <a class="text-body-secondary" href="https://t.me/AlexStarkJr" target="_blank" >
-                                <img src="{% static 'assets/images/telegram-black.svg' %}" class="social-icon">
+                                <img src="{% static 'assets/images/telegram-black.svg' %}" class="social-icon" alt="telegram-logo">
                             </a>
                         </li>
                         <li class="ms-3">
                             <a class="text-body-secondary" href="https://github.com/Alexandr-Starkov" target="_blank">
-                                <img src="{% static 'assets/images/git-black.svg' %}" class="social-icon">
+                                <img src="{% static 'assets/images/git-black.svg' %}" class="social-icon" alt="git-logo">
                             </a>
                         </li>
                         <li class="ms-3">
                             <a class="text-body-secondary" href="https://github.com/Alexandr-StarkovJr" target="_blank">
-                                <img src="{% static 'assets/images/git-second-black.svg' %}" class="social-icon">
+                                <img src="{% static 'assets/images/git-second-black.svg' %}" class="social-icon" alt="git-logo">
                             </a>
                         </li>
                         <li class="ms-3">
                             <a class="text-body-secondary" href="mailto:starkoff55@gmail.com">
-                                <img src="{% static 'assets/images/mail-black.svg' %}" class="social-icon">
+                                <img src="{% static 'assets/images/mail-black.svg' %}" class="social-icon" alt="mail-logo">
                             </a>
                         </li>
                     </ul>

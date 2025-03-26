@@ -1,3 +1,4 @@
+import datetime
 import json
 import secrets
 from typing import Tuple
@@ -8,9 +9,9 @@ from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.hashers import make_password
-from django.shortcuts import redirect
+from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, date
 from django.conf import settings
 
 from .models import Task, PasswordResetToken
@@ -20,7 +21,7 @@ def generate_reset_token():
     return secrets.token_urlsafe(32)
 
 
-def generate_data_message(url: str) -> Tuple[str, str, str]:
+def generate_recovery_message(url: str) -> Tuple[str, str, str]:
     subject = 'MindFlow: Password recovery'
     plain_message = f'Follow the link to recover your password: {url}'
     html_message = f'''
@@ -28,7 +29,7 @@ def generate_data_message(url: str) -> Tuple[str, str, str]:
     <body>
         <h1>MindFlow</h1>
         <p>You have requested a password reset. Click the link below to set a new password:</p>
-        <a href="{url}">Restore password</a>
+        <a href="{url}">{url}</a>
         <p>If you have not requested password recovery, ignore this email.</p>
     </body>
 </html>
@@ -36,8 +37,53 @@ def generate_data_message(url: str) -> Tuple[str, str, str]:
     return subject, plain_message, html_message
 
 
-def main_view(request: HttpRequest) -> HttpResponse:
-    return render(request, 'notes/index.html')
+def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
+    if request.method == 'GET':
+        context = {
+            'date': date.today().strftime('%d/%m/%Y'),
+            # 'tasks': Task.objects.all().prefetch_related(),
+            'tasks': Task.objects.all(),
+        }
+        return render(request, 'notes/index.html', context=context)
+    return JsonResponse({'error': 'Только GET запросы!'}, status=405)
+
+
+def create_task_view(request: HttpRequest) -> JsonResponse:
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_task = data.get('newTask')
+
+            if not new_task:
+                return JsonResponse({'error': 'Заполните значение для заметки, название не должно быть пустым!'},
+                                    status=400)
+
+            new_task: Task = Task.objects.create(title=new_task)
+            task_html = render(request, 'notes/tasks/task.html', {'task': new_task}).content.decode('utf-8')
+
+            return JsonResponse({'message': 'Заметка успешно создана!',
+                                 'task_html': task_html}, status=200)
+            # return JsonResponse({'message': 'Успешное создание заметки!',
+            #                      'new_task': {'id': new_task.id, 'title': new_task.title}
+            #                      }, status=200)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
+    return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+
+
+def update_task_view(request) -> JsonResponse:
+    pass
+
+
+def delete_task_view(request, task_id) -> JsonResponse:
+    if request.method == 'DELETE':
+        task: Task = Task.objects.get(id=task_id)
+        if not task:
+            return JsonResponse({'error': 'task не найден в БД'}, status=400)
+
+        task.delete()
+        return JsonResponse({'message': 'Успешное удаление!'}, status=200)
+    return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
 def authorization_view(request: HttpRequest) -> HttpResponse:
@@ -116,6 +162,7 @@ def create_new_user(*args) -> bool:
                     login(request, user)
             return True
     except Exception as e:
+        # В дальнейшем реализовать logger
         print(f"Ошибка при создании пользователя: {e}")
         return False
     return False
@@ -154,7 +201,7 @@ def password_reset_form_view(request: HttpRequest):
 
             user = is_user_exist(user_email=user_email)
             if not user:
-                return JsonResponse({'error': 'Пользователя с введенным email несуществует'}, status=400)
+                return JsonResponse({'error': 'Пользователя с введенным email не существует'}, status=400)
 
             # Token Generation
             token = generate_reset_token()
@@ -162,7 +209,7 @@ def password_reset_form_view(request: HttpRequest):
             PasswordResetToken.objects.create(user=user, token=token)
             # Send email with token
             reset_url = request.build_absolute_uri(reverse('password_reset_confirm', args=[token]))
-            subject, plain_message, html_message = generate_data_message(reset_url)
+            subject, plain_message, html_message = generate_recovery_message(reset_url)
 
             send_mail(
                 subject,
@@ -193,7 +240,7 @@ def password_reset_confirm_view(request: HttpRequest, token):
             return JsonResponse({'error': 'Заполните все поля данными!'}, status=400)
 
         if new_password != password_confirm:
-            return JsonResponse({'error': 'Пароли не сопвадают'}, status=400)
+            return JsonResponse({'error': 'Пароли не совпадают'}, status=400)
 
         reset_token = PasswordResetToken.objects.filter(token=token).first()
         if not reset_token:
@@ -204,7 +251,7 @@ def password_reset_confirm_view(request: HttpRequest, token):
             return JsonResponse({'error': 'Срок действия токена истек'}, status=400)
 
         # Update password
-        user = reset_token.user
+        user = reset_token.user  #
         user.password = make_password(new_password)
         user.save()
 
@@ -214,21 +261,22 @@ def password_reset_confirm_view(request: HttpRequest, token):
             'instruction_message': 'Пароль успешно изменен!',
             'redirect_url': reverse('main'),
         }, status=200)
-
-    return render(request, 'notes/password_reset_confirm.html', {'token': token})
-
-
-def task_list_view(request: HttpRequest):
-    pass
+    elif request.method == 'GET':
+        return render(request, 'notes/password-reset-confirm.html', {'token': token})
+    else:
+        return JsonResponse({'error': 'Только POST или GET запросы!'}, status=405)
 
 
-def task_create_view(request: HttpRequest):
-    pass
+def update_title_view(request) -> JsonResponse:
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        new_title = data.get('headerName')
 
+        if not new_title:
+            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
 
-def task_update_view(request: HttpRequest):
-    pass
+        # Сохранение в сессии
+        request.session['todo_title'] = new_title
+        return JsonResponse({'message': 'Успешное изменение title', 'new_title': new_title}, status=200)
 
-
-def task_delete_view(request: HttpRequest):
-    pass
+    return JsonResponse({'error': 'Только POST запросы!'}, status=405)

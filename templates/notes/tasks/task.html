@@ -1,0 +1,12 @@
+<div class="task-item d-flex align-items-center justify-content-between p-3 mb-2 bg-white shadow-sm rounded">
+    <form class="task-form" data-task-id="{{ task.id }}">
+        <input type="text" class="task border-0 bg-transparent w-100" name="task-title"
+               id="task-{{ task.id }}" value="{{ task.title }}">
+        <label for="task-{{ task.id }}" class="visually-hidden">Task</label>
+    </form>
+    <button class="btn btn-link text-danger p-0 ms-2 delete-task" data-task-id="{{ task.id }}">
+        <i class="bi bi-x-circle"></i>
+    </button>
+</div>
+
+

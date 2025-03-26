@@ -21,6 +21,13 @@ main {
     flex: 1;
 }
 
+h1, header {
+    color: var(--text-color);
+    font-weight: normal;
+    font-size: 20px;
+    line-height: 10px;
+}
+
 .container-fluid {
     padding-right: 30px;
     padding-left: 30px;
@@ -76,4 +83,77 @@ footer {
 
 .link-hover:hover {
     color: #212529 !important;
+}
+
+.header-title {
+    font-size: 25px;
+}
+
+.header-form {
+    margin: 0;
+    padding: 0;
+}
+
+.header-name {
+    border: none;
+    background: transparent;
+    outline: none;
+}
+
+.header-name:focus {
+    outline: none;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.new-task-h {
+    font-size: 36px;
+}
+
+.new-task-form {
+    margin: 0;
+    padding: 0;
+}
+
+.new-task {
+    display: block;
+    border: none;
+    background: transparent;
+    outline: none;
+    width: 800px;
+}
+
+.new-task:focus {
+    outline: none;
+}
+
+.task-list {
+    width: 100%;
+}
+
+.task-item {
+    border: 1px solid #ddd;
+    transition: background 0.3s ease-in-out;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.task-item:hover {
+    background-color: #f8f9fa;
+}
+
+.task {
+    font-size: 22px;
+    border: none;
+    outline: none;
 }
