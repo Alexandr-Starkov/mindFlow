@@ -9,7 +9,7 @@ from .views import (main_view, authorization_view, authorization_form_view,
 urlpatterns = [
     path('', main_view, name='main'),
     path('create-task/', create_task_view, name='create_task'),
-    path('update_task_view/', update_task_view, name='update_task'),
+    path('update-task/<int:task_id>', update_task_view, name='update_task'),
     path('delete-task/<int:task_id>', delete_task_view, name='delete_task'),
     path('authorization/', authorization_view, name='authorization'),
     path('authorization-form/', authorization_form_view, name='authorization_form'),

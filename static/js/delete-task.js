@@ -13,11 +13,13 @@ document.addEventListener("DOMContentLoaded", function () {
                     "X-CSRFToken": getCookie('csrftoken'),
                 }
             })
-            .then(response => {
-                if (response.ok) {
-                    document.getElementById(`task-${taskId}`).closest(".task-item").remove()
+            .then(response => response.json())
+            .then(result => {
+                if (result.message) {
+                    console.log(result.message);
+                    document.getElementById(`task-${taskId}`).closest(".task-item").remove();
                 } else {
-                    console.error("error");
+                    console.error(result.error || "Ошибка при удалении заметки!");
                 }
             })
             .catch(error => console.error("Ошибка:", error));

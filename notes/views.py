@@ -50,6 +50,7 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
 
 def create_task_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
+        print('Пришел запрос на добавление новой заметки!')
         try:
             data = json.loads(request.body)
             new_task = data.get('newTask')
@@ -63,26 +64,41 @@ def create_task_view(request: HttpRequest) -> JsonResponse:
 
             return JsonResponse({'message': 'Заметка успешно создана!',
                                  'task_html': task_html}, status=200)
-            # return JsonResponse({'message': 'Успешное создание заметки!',
-            #                      'new_task': {'id': new_task.id, 'title': new_task.title}
-            #                      }, status=200)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
-def update_task_view(request) -> JsonResponse:
-    pass
+def update_task_view(request, task_id) -> JsonResponse:
+    if request.method == 'PUT':
+        print(f'Пришел запрос на обновление заметки task-id: {task_id}')
+        try:
+            data = json.loads(request.body)
+            task_value = data.get('taskValue')
+            task = Task.objects.get(id=task_id)
+
+            task.title = task_value
+            task.save()
+
+            return JsonResponse({'message': 'Успешное обновление заметки',
+                                 'task': {'task_id': task.id, 'task_title': task.title}
+                                 }, status=200)
+        except Task.DoesNotExist:
+            return JsonResponse({'error': 'task не найден в бд!'}, status=400)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
+    return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
 
 
 def delete_task_view(request, task_id) -> JsonResponse:
     if request.method == 'DELETE':
-        task: Task = Task.objects.get(id=task_id)
-        if not task:
-            return JsonResponse({'error': 'task не найден в БД'}, status=400)
-
-        task.delete()
-        return JsonResponse({'message': 'Успешное удаление!'}, status=200)
+        print(f'Пришел запрос на удаление заметки task-id: {task_id}')
+        try:
+            task: Task = Task.objects.get(id=task_id)
+            task.delete()
+            return JsonResponse({'message': 'Заметка успешно удалена!'}, status=200)
+        except Task.DoesNotExist:
+            return JsonResponse({'error': 'task не найден в бд!'}, status=400)
     return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
