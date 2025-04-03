@@ -4,7 +4,6 @@ import { getCookie } from "./utilities.js";
 document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".delete-task").forEach(button => {
         button.addEventListener("click", function () {
-
             const taskId = this.getAttribute('data-task-id');
 
             fetch(`/delete-task/${taskId}`, {

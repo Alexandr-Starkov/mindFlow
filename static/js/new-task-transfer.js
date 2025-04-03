@@ -2,21 +2,22 @@ import { dataTransfer } from "./utilities.js";
 
 
 let form = document.querySelector('#new-task-form'),
-    newTaskInput = document.querySelector('#new-task');
+    taskInput = form.querySelector('.new-task');
 
-form.onsubmit = async function(event) {
+form.addEventListener('submit', async function(event) {
     event.preventDefault();
 
-    let newTaskInputValue = newTaskInput.value.trim();
+    let taskInputValue = taskInput.value.trim();
 
-    if (newTaskInputValue) {
+    if (taskInputValue) {
         let formData = {
-            newTask: newTaskInputValue,
+            'newTask': taskInputValue,
         };
         await dataTransfer(form, formData);
     } else {
         return;
     }
-    newTaskInput.value = '';
-    newTaskInput.blur();
-}
+
+    taskInput.value = '';
+    taskInput.blur();
+})

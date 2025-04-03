@@ -1,4 +1,12 @@
+
+document.addEventListener('DOMContentLoaded', function () {
+    setupTaskHandlers();
+});
+
 export function getCookie(name) {
+    /*
+        Поиск и возврат искомых куки
+     */
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
         const cookies = document.cookie.split(';');
@@ -14,8 +22,10 @@ export function getCookie(name) {
     return cookieValue;
 }
 
-
 export async function dataTransfer(form, formData, successCallback = null, errorCallback = null, method = 'POST') {
+    /*
+        Отправляет данные на бэк и обрабатывает результат
+    */
     try {
         let response = await fetch(form.dataset.url, {
             method: method,
@@ -26,39 +36,39 @@ export async function dataTransfer(form, formData, successCallback = null, error
             body: JSON.stringify(formData)
         });
 
-        let contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            let result = await response.json();
-
-            if (!response.ok) {
-                console.error('Ошибка', result.error);
-                alert(result.error | 'Ошибка. Проверьте введенные данные');
-                return null;
-            }
-
-            if (result.instruction_message) {
-                console.log(result.message);
-                alert(result.instruction_message);
-            }
-
-            if (result.redirect_url) {
-                console.log(result.message);
-                setTimeout(() => {
-                    window.location.href = result.redirect_url;
-                }, 500);
-            }
-
-            if (result.task_html) {
-                console.log(result.message);
-                addTaskToDom(result.task_html);
-            }
-
-            return result;
-        } else {
-            console.error("Ошибка: Сервер вернул не JSON!");
-            alert("Ошибка сервера. Попробуйте позже.");
+        if (!response.ok) {
+            console.error('Ошибка при запросе:', response.status);
+            alert('Ошибка. Проверьте введенные данные');
             return null;
         }
+
+        let contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            console.error('Ошибка: Сервер вернул не JSON!');
+            alert('Ошибка сервера. Попробуйте позже!');
+            return null;
+        }
+
+        let result = await response.json();
+
+        if (result.instruction_message) {
+            console.log(result.message);
+            alert(result.instruction_message);
+        }
+
+        if (result.redirect_url) {
+            console.log(result.message);
+            setTimeout(() => {
+                window.location.href = result.redirect_url;
+            }, 500);
+        }
+
+        if (result.task_html) {
+            console.log(result.message);
+            addTaskToDom(result.task_html);
+        }
+
+        return result;
     } catch (error) {
         console.error("Обнаружена ошибка попробуйте позже");
         alert("Ошибка попробуйте позже!");
@@ -66,77 +76,79 @@ export async function dataTransfer(form, formData, successCallback = null, error
 }
 
 function addTaskToDom(taskHTML) {
+    /*
+        Добавление блока разметки в DOM дерево
+    */
     let taskContainer = document.querySelector('#task-container');
-    taskContainer.insertAdjacentHTML('beforeend', taskHTML);  //
-    setupTaskHandlers();
+    taskContainer.insertAdjacentHTML('afterbegin', taskHTML);  //
 }
 
 function setupTaskHandlers() {
-    let taskContainer = document.querySelector('#task-container');
+    /*
+         Установка обработчиков для динамически добавленных заметок (делегирование событий)
+    */
+    const taskContainer = document.querySelector('#task-container');
+    if (!taskContainer || taskContainer.dataset.setup) return;
 
-    if (!taskContainer) return;
+    // Помечаем контейнер как обработанный
+    taskContainer.dataset.setup = 'true';
 
-    // Удаление задачи
+    // Выделение текста при фокусе
+    taskContainer.addEventListener('focus', function (event) {
+        let taskInput = event.target.closest('.task')
+        if (taskInput) {
+            taskInput.select();
+        }
+    }, true);
+
+    // Обновление задачи (делегирование событий)
+    taskContainer.addEventListener('submit', async function(event) {
+        let form = event.target.closest('.task-form');
+        if (!form) return;
+
+        event.preventDefault();
+        let taskInput = form.querySelector('.task');
+
+        let taskInputValue = taskInput.value.trim() || '-';
+        let formData = { taskValue: taskInputValue };
+
+        let result = await dataTransfer(form, formData, null, null, 'PUT');
+        if (result && result.task) {
+            console.log(`Значение заметки TaskId: ${result.task.task_id} обновлено на TaskValue: ${result.task.task_title}`);
+            taskInput.value = result.task.task_title;
+        } else {
+            console.error(result.error);
+            alert(result.error || 'Ошибка обновления!');
+        }
+        setTimeout(() => taskInput.blur(), 100);
+    });
+
+    // Удаление задачи (делегирование событий)
     taskContainer.addEventListener('click', async function (event) {
         let deleteButton = event.target.closest('.delete-task');
         if (deleteButton) {
             let taskElement = deleteButton.closest('.task-item');
             let taskId = deleteButton.dataset.taskId;
 
-            let response = await fetch(`/delete-task/${taskId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken'),
+            try {
+                let response = await fetch(`/delete-task/${taskId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    }
+                });
+
+                if (!response.ok) {
+                    console.error(`Ошибка удаления:`, response.status);
                 }
-            });
 
-            let result = await response.json();
-
-            if (response.ok) {
+                let result = await response.json();
                 console.log(result.message);
                 taskElement.remove();
-            } else {
-                console.error(result.error);
-                alert(result.error || 'Ошибка удаления');
+            } catch (error) {
+                console.error(error);
+                alert('Ошибка при удалении задачи!');
             }
         }
     });
-
-    // Обновление задачи
-    taskContainer.querySelectorAll('.task-form').forEach((form) => {
-        if (!form.dataset.setup) {
-            form.dataset.setup = 'true';
-
-            form.addEventListener('submit', async function(event) {
-                event.preventDefault();
-
-                let taskInput = form.querySelector('.task');
-                let taskInputValue = taskInput.value.trim() || '-';
-
-                let formData = { taskValue: taskInputValue };
-
-                let result = await dataTransfer(form, formData, null, null, 'PUT');
-
-                if (result && result.task) {
-                    console.log(`TaskId: ${result.task.task_id}, TaskValue: ${taskInputValue} обновлена на ${result.task.task_title}`);
-                    taskInput.value = result.task.task_title;
-                } else {
-                    console.error(result.error);
-                    alert(result.error || 'Ошибка обновления!');
-                }
-
-                setTimeout(() => taskInput.blur(), 100);
-            });
-        }
-    });
-
-    // Выделение текста при фокусе
-    taskContainer.addEventListener('focus', function (event) {
-        let taskInput = event.target.closest('.task')
-
-        if (taskInput) {
-            taskInput.select();
-        }
-
-    }, true);
 }

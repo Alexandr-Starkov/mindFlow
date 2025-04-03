@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 taskInputValue = '-';
             }
 
-
             let formData = {
                 taskValue: taskInputValue,
             }
@@ -34,5 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             setTimeout(() => taskInput.blur(), 100);
         });
+
+
     });
 });

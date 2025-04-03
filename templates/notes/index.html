@@ -63,8 +63,7 @@
 
 {% block script %}
     {% load static %}
+    <script type="module" src="{% static 'js/utilities.js' %}"></script>
     <script type="module" src="{% static 'js/header-name-transfer.js' %}"></script>
     <script type="module" src="{% static 'js/new-task-transfer.js' %}"></script>
-    <script type="module" src="{% static 'js/delete-task.js' %}"></script>
-    <script type="module" src="{% static 'js/update-task.js' %}"></script>
 {% endblock %}

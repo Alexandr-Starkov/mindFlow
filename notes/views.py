@@ -41,8 +41,8 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     if request.method == 'GET':
         context = {
             'date': date.today().strftime('%d/%m/%Y'),
-            # 'tasks': Task.objects.all().prefetch_related(),
-            'tasks': Task.objects.all(),
+            # 'tasks': Task.objects.all().reverse().prefetch_related(),
+            'tasks': Task.objects.all().order_by('-id'),
         }
         return render(request, 'notes/index.html', context=context)
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
@@ -62,7 +62,7 @@ def create_task_view(request: HttpRequest) -> JsonResponse:
             new_task: Task = Task.objects.create(title=new_task)
             task_html = render(request, 'notes/tasks/task.html', {'task': new_task}).content.decode('utf-8')
 
-            return JsonResponse({'message': 'Заметка успешно создана!',
+            return JsonResponse({'message': f'Заметка c task-id: {new_task.id} и task-title: "{new_task.title}" успешно создана!',
                                  'task_html': task_html}, status=200)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
@@ -80,11 +80,11 @@ def update_task_view(request, task_id) -> JsonResponse:
             task.title = task_value
             task.save()
 
-            return JsonResponse({'message': 'Успешное обновление заметки',
+            return JsonResponse({'message': f'Успешное обновление заметки c task-id: {task_id}',
                                  'task': {'task_id': task.id, 'task_title': task.title}
                                  }, status=200)
         except Task.DoesNotExist:
-            return JsonResponse({'error': 'task не найден в бд!'}, status=400)
+            return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
     return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
@@ -96,9 +96,9 @@ def delete_task_view(request, task_id) -> JsonResponse:
         try:
             task: Task = Task.objects.get(id=task_id)
             task.delete()
-            return JsonResponse({'message': 'Заметка успешно удалена!'}, status=200)
+            return JsonResponse({'message': f'Заметка task-id: {task_id} успешно удалена!'}, status=200)
         except Task.DoesNotExist:
-            return JsonResponse({'error': 'task не найден в бд!'}, status=400)
+            return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
     return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
@@ -178,13 +178,14 @@ def create_new_user(*args) -> bool:
                     login(request, user)
             return True
     except Exception as e:
-        # В дальнейшем реализовать logger
+        # Реализовать logger
         print(f"Ошибка при создании пользователя: {e}")
         return False
     return False
 
 
 def is_user_exist(user_login=None, user_email=None) -> User | bool:
+    # Переписать логику
     if user_login:
         user_by_login = User.objects.filter(username=user_login).first()
         if user_by_login:
