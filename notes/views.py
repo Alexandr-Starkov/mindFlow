@@ -1,4 +1,3 @@
-import datetime
 import json
 import secrets
 from typing import Tuple
@@ -14,7 +13,7 @@ from django.utils import timezone
 from datetime import timedelta, date
 from django.conf import settings
 
-from .models import Task, PasswordResetToken
+from .models import Task, PasswordResetToken, HeaderTitle
 
 
 def generate_reset_token():
@@ -39,10 +38,19 @@ def generate_recovery_message(url: str) -> Tuple[str, str, str]:
 
 def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     if request.method == 'GET':
+        print('Пришел GET запрос в main_view')
+        user_header_title = None
+        if request.user.is_authenticated:
+            print(f'Пришел запрос от авторизованного пользователя - {request.user}')
+            header_obj = HeaderTitle.objects.filter(user=request.user).first()
+            if header_obj:
+                user_header_title = header_obj.header_title
+
         context = {
             'date': date.today().strftime('%d/%m/%Y'),
             # 'tasks': Task.objects.all().reverse().prefetch_related(),
             'tasks': Task.objects.all().order_by('-id'),
+            'user_header_title': user_header_title,
         }
         return render(request, 'notes/index.html', context=context)
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
@@ -50,7 +58,7 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
 
 def create_task_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
-        print('Пришел запрос на добавление новой заметки!')
+        print('Пришел POST запрос в create_task_view на добавление новой заметки!')
         try:
             data = json.loads(request.body)
             new_task = data.get('newTask')
@@ -71,7 +79,7 @@ def create_task_view(request: HttpRequest) -> JsonResponse:
 
 def update_task_view(request, task_id) -> JsonResponse:
     if request.method == 'PUT':
-        print(f'Пришел запрос на обновление заметки task-id: {task_id}')
+        print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id}')
         try:
             data = json.loads(request.body)
             task_value = data.get('taskValue')
@@ -92,7 +100,7 @@ def update_task_view(request, task_id) -> JsonResponse:
 
 def delete_task_view(request, task_id) -> JsonResponse:
     if request.method == 'DELETE':
-        print(f'Пришел запрос на удаление заметки task-id: {task_id}')
+        print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id}')
         try:
             task: Task = Task.objects.get(id=task_id)
             task.delete()
@@ -102,12 +110,45 @@ def delete_task_view(request, task_id) -> JsonResponse:
     return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
-def authorization_view(request: HttpRequest) -> HttpResponse:
-    return render(request, 'notes/authorization.html')
+def update_header_name_view(request: HttpRequest) -> JsonResponse:
+    if request.method == 'POST':
+        print('Пришел POST запрос в update_header_name_view на обновление Header-Title')
+        try:
+            data = json.loads(request.body)
+            new_header_name = data.get('newHeaderName')
+            if not new_header_name:
+                raise ValueError('Пустое значение')
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
+
+        # Неавторизованный пользователь
+        if not request.user.is_authenticated:
+            request.session['new_header_name'] = new_header_name
+            return JsonResponse({'message': f'Header-Title успешно изменен на {new_header_name}',
+                                 'new_header_name': new_header_name}, status=200)
+
+        # Авторизованный пользователь
+        header_obj, created = HeaderTitle.objects.get_or_create(user=request.user)
+        header_obj.header_title = new_header_name
+        header_obj.save()
+
+        return JsonResponse({
+            'message': f"Header-Title успешно {'создан' if created else 'обновлен'} на {new_header_name}",
+            'new_header_name': header_obj.header_title,
+        }, status=200)
+    return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+
+
+def authorization_view(request: HttpRequest) -> HttpResponse | JsonResponse:
+    if request.method == "GET":
+        print('Пришел GET запрос в authorization_view')
+        return render(request, 'notes/authorization.html')
+    return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
 def authorization_form_view(request: HttpRequest):
     if request.method == 'POST':
+        print('Пришел POST запрос в authorization_form_view')
         try:
             data = json.loads(request.body)
             user_login = data.get('login')
@@ -131,12 +172,16 @@ def authorization_form_view(request: HttpRequest):
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
-def registration_view(request: HttpRequest) -> HttpResponse:
-    return render(request, 'notes/registration.html')
+def registration_view(request: HttpRequest) -> HttpResponse | JsonResponse:
+    if request.method == 'GET':
+        print('Пришел GET запрос в registration_view')
+        return render(request, 'notes/registration.html')
+    return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
 def registration_form_view(request: HttpRequest) -> JsonResponse:
-    if request.method == "POST":
+    if request.method == 'POST':
+        print('Пришел POST запрос в registration_form_view')
         try:
             data = json.loads(request.body)
             user_login = data.get('login')
@@ -148,8 +193,11 @@ def registration_form_view(request: HttpRequest) -> JsonResponse:
 
             is_create = create_new_user(user_login, user_email, user_password, request)
 
+            if is_create is None:
+                return JsonResponse({'error': 'Внутренняя ошибка при создании пользователя!'}, status=500)
+
             if not is_create:
-                return JsonResponse({'message': 'Пользователь с таким Login или Email уже существует'}, status=400)
+                return JsonResponse({'error': 'Пользователь с таким Login или Email уже существует'}, status=400)
 
             return JsonResponse({
                 'message': f'Успешная регистрация пользователя {user_login}',
@@ -160,15 +208,15 @@ def registration_form_view(request: HttpRequest) -> JsonResponse:
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
-def create_new_user(*args) -> bool:
+def create_new_user(*args) -> bool | None:
     user_login, user_email, user_password, request = args
     try:
         exist = is_user_exist(user_login, user_email)
         if not exist:
             new_user = User.objects.create_user(username=user_login, email=user_email, password=user_password)
+
             group = Group.objects.get(name='Пользователи приложения')
             new_user.groups.add(group)
-
             permissions = group.permissions.all()
             new_user.user_permissions.set(permissions)
 
@@ -180,36 +228,38 @@ def create_new_user(*args) -> bool:
     except Exception as e:
         # Реализовать logger
         print(f"Ошибка при создании пользователя: {e}")
-        return False
+        return None
     return False
 
 
 def is_user_exist(user_login=None, user_email=None) -> User | bool:
-    # Переписать логику
-    if user_login:
-        user_by_login = User.objects.filter(username=user_login).first()
-        if user_by_login:
-            return user_by_login
+    user_by_login = User.objects.filter(username=user_login).first()
+    user_by_email = User.objects.filter(email=user_email).first()
 
-    if user_email:
-        user_by_email = User.objects.filter(email=user_email).first()
-        if user_by_email:
-            return user_by_email
+    if user_by_login:
+        return user_by_login
+    if user_by_email:
+        return user_by_email
 
     return False
 
 
-def logout_view(request: HttpRequest):
+def logout_view(request: HttpRequest) -> HttpResponse:
+    print('Пришел запрос в logout_view')
     logout(request)
     return redirect('main')
 
 
-def password_reset_view(request: HttpRequest):
-    return render(request, 'notes/password-reset.html')
+def password_reset_view(request: HttpRequest) -> HttpResponse | JsonResponse:
+    if request.method == 'GET':
+        print('Пришел GET запрос в password_reset_view')
+        return render(request, 'notes/password-reset.html')
+    return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
 def password_reset_form_view(request: HttpRequest):
     if request.method == 'POST':
+        print('Пришел POST запрос в password_reset_form_view')
         try:
             data = json.loads(request.body)
             user_email = data.get('email')
@@ -249,6 +299,7 @@ def password_reset_form_view(request: HttpRequest):
 
 def password_reset_confirm_view(request: HttpRequest, token):
     if request.method == 'POST':
+        print(f'Пришел POST запрос в password_reset_confirm_view c token: {token}')
         data = json.loads(request.body)
         new_password = data.get('new_password')
         password_confirm = data.get('password_confirm')
@@ -279,21 +330,7 @@ def password_reset_confirm_view(request: HttpRequest, token):
             'redirect_url': reverse('main'),
         }, status=200)
     elif request.method == 'GET':
+        print('Пришел GET запрос в password_reset_confirm_view')
         return render(request, 'notes/password-reset-confirm.html', {'token': token})
     else:
         return JsonResponse({'error': 'Только POST или GET запросы!'}, status=405)
-
-
-def update_title_view(request) -> JsonResponse:
-    if request.method == 'POST':
-        data = json.loads(request.body)
-        new_title = data.get('headerName')
-
-        if not new_title:
-            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
-
-        # Сохранение в сессии
-        request.session['todo_title'] = new_title
-        return JsonResponse({'message': 'Успешное изменение title', 'new_title': new_title}, status=200)
-
-    return JsonResponse({'error': 'Только POST запросы!'}, status=405)

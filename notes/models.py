@@ -17,5 +17,14 @@ class PasswordResetToken(models.Model):
     token = models.CharField(max_length=64, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'Token for {self.user.username}'
+
+
+class HeaderTitle(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    header_title = models.CharField(max_length=15)
+
+    def __str__(self):
+        return f'Header-Title(pk={self.pk}), User: {self.user.username}, Header-Title: {self.header_title}'
+

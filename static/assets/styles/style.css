@@ -94,13 +94,13 @@ footer {
     padding: 0;
 }
 
-.header-name {
+.header-name-input {
     border: none;
     background: transparent;
     outline: none;
 }
 
-.header-name:focus {
+.header-name-input:focus {
     outline: none;
 }
 

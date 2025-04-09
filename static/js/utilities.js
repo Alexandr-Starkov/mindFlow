@@ -1,5 +1,6 @@
 
 document.addEventListener('DOMContentLoaded', function () {
+    setupTaskTitleHandlers();
     setupTaskHandlers();
 });
 
@@ -36,12 +37,6 @@ export async function dataTransfer(form, formData, successCallback = null, error
             body: JSON.stringify(formData)
         });
 
-        if (!response.ok) {
-            console.error('Ошибка при запросе:', response.status);
-            alert('Ошибка. Проверьте введенные данные');
-            return null;
-        }
-
         let contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             console.error('Ошибка: Сервер вернул не JSON!');
@@ -51,20 +46,33 @@ export async function dataTransfer(form, formData, successCallback = null, error
 
         let result = await response.json();
 
-        if (result.instruction_message) {
-            console.log(result.message);
-            alert(result.instruction_message);
+        // Обработка ошибок
+        if (result.error) {
+            console.error('Ошибка:', result.error);
+            if (typeof errorCallback === 'function') {
+                errorCallback(result.error, result);
+            } else {
+                alert(result.error);
+            }
         }
 
+        // Обработка успешного сообщения
+        if (result.message) {
+            console.log('Сообщение:',result.message);
+            if (typeof successCallback === 'function') {
+                successCallback(result.message, result);
+            }
+        }
+
+        // Перенаправление
         if (result.redirect_url) {
-            console.log(result.message);
             setTimeout(() => {
                 window.location.href = result.redirect_url;
             }, 500);
         }
 
+        // Динамическое добавление HTML
         if (result.task_html) {
-            console.log(result.message);
             addTaskToDom(result.task_html);
         }
 
@@ -80,7 +88,52 @@ function addTaskToDom(taskHTML) {
         Добавление блока разметки в DOM дерево
     */
     let taskContainer = document.querySelector('#task-container');
-    taskContainer.insertAdjacentHTML('afterbegin', taskHTML);  //
+    taskContainer.insertAdjacentHTML("afterbegin", taskHTML);  //
+}
+
+function setupTaskTitleHandlers() {
+    /*
+        Установка обработчиков для динамически обновленного названия заметок (делегирование событий)
+    */
+    const headerNameContainer = document.querySelector('#header-name-container');
+    if (!headerNameContainer || headerNameContainer.dataset.setup) return;
+    headerNameContainer.dataset.setup = 'true';
+
+    // Выделение текста при фокусе
+    headerNameContainer.addEventListener('focus', function (event) {
+        let headerNameInput = event.target.closest('.header-name-input');
+        if (headerNameInput) {
+            headerNameInput.select();
+        }
+    }, true);
+
+    // Обновление header-name (делегирование событий)
+    headerNameContainer.addEventListener('submit', async function(event) {
+        let form = event.target.closest('.header-form');
+        if (!form) return;
+
+        event.preventDefault();
+        let headerNameInput = form.querySelector('.header-name-input');
+        let defaultValue = `My to-do list ${headerNameInput.dataset.defaultDate}`;
+        let headerInputValue = headerNameInput.value.trim() || defaultValue;
+
+        let formData = {
+            newHeaderName: headerInputValue,
+        };
+
+        try {
+            let result = await dataTransfer(form, formData);
+
+            if (result && result.new_header_name) {
+                headerNameInput.value = result.new_header_name;
+                // console.log(result.message);
+                setTimeout(() => headerNameInput.blur(), 100);
+            }
+        } catch (error) {
+            // console.error(error);
+            alert('Ошибка при обновлении Header-Title');
+        }
+    });
 }
 
 function setupTaskHandlers() {

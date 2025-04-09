@@ -2,20 +2,42 @@
 
 {% block header_class %}py-2 mb-1 border-bottom{% endblock %}
 {% block header %}
-    <form class="header-form" id="header-form" method="post" data-url="{% url 'update_title' %}">
-    {% csrf_token %}
-        <div class="container-fluid d-flex">
-            <h1 class="header-title">
-                <input class="header-name"
-                        type="text"
-                        id="default-text"
-                        value="{{ request.session.todo_title }}"
-                        maxlength="15"
-                        data-default-date="{{ date }}">
-                <label for="default-text" class="visually-hidden"></label>
-            </h1>
+    <div class="container-fluid d-flex">
+        <div class="header-name" id="header-name-container">
+            <form class="header-form" id="header-form" method="post" data-url="{% url 'update_header_name' %}">
+                {% csrf_token %}
+                {% with default_title="My to-do list "|add:date %}
+                    {% if user.is_authenticated %}
+                        {% with value=user_header_title|default:default_title %}
+                            <h1 class="header-title">
+                                <input class="header-name-input"
+                                        id="header-name"
+                                        type="text"
+                                        value="{{ value }}"
+                                        maxlength="15"
+                                        data-default-date="{{ date }}"
+                                        autocomplete="off">
+                                <label for="header-name" class="visually-hidden"></label>
+                            </h1>
+                        {% endwith %}
+                    {% else %}
+                        {% with value=request.session.new_header_name|default:default_title %}
+                            <h1 class="header-title">
+                                <input class="header-name-input"
+                                       id="header-name"
+                                       type="text"
+                                       value="{{ value }}"
+                                       maxlength="15"
+                                       data-default-date="{{ date }}"
+                                       autocomplete="off">
+                                <label for="header-name" class="visually-hidden"></label>
+                            </h1>
+                        {% endwith %}
+                    {% endif %}
+                {% endwith %}
+            </form>
         </div>
-    </form>
+    </div>
 {% endblock %}
 
 {% block main_class %} py-3 mb-2 {% endblock %}
@@ -45,10 +67,10 @@
                     {% csrf_token %}
                     <input type="text"
                         class="task"
-                        data-task-id="{{ task.id }}"
-                        name="task-title"
                         id="task-{{ task.id }}"
+                        name="task-title"
                         value="{{ task.title }}"
+                        data-task-id="{{ task.id }}"
                         autocomplete="off">
                     <label for="task-{{ task.id }}" class="visually-hidden">Task</label>
                 </form>
@@ -64,6 +86,5 @@
 {% block script %}
     {% load static %}
     <script type="module" src="{% static 'js/utilities.js' %}"></script>
-    <script type="module" src="{% static 'js/header-name-transfer.js' %}"></script>
     <script type="module" src="{% static 'js/new-task-transfer.js' %}"></script>
 {% endblock %}
