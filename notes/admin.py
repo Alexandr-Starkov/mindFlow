@@ -5,8 +5,8 @@ from .models import Task, PasswordResetToken, HeaderTitle
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = 'pk', 'title', 'created_at', 'updated_at', 'is_completed'
-    list_display_links = 'pk', 'title'
+    list_display = 'pk', 'user', 'title', 'created_at', 'updated_at', 'is_completed'
+    list_display_links = 'pk', 'user', 'title'
 
 
 @admin.register(PasswordResetToken)

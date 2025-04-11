@@ -52,7 +52,7 @@
                     autofocus="autofocus"
                     placeholder="Write your next task here..."
                     required
-                    maxlength="40"
+                    maxlength="50"
                     autocomplete="off">
                 <label class="visually-hidden" for="new-task">Add another task</label>
             </h1>
@@ -68,9 +68,10 @@
                     <input type="text"
                         class="task"
                         id="task-{{ task.id }}"
+                        data-task-id="{{ task.id }}"
                         name="task-title"
                         value="{{ task.title }}"
-                        data-task-id="{{ task.id }}"
+                        maxlength="50"
                         autocomplete="off">
                     <label for="task-{{ task.id }}" class="visually-hidden">Task</label>
                 </form>

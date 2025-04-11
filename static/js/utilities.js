@@ -126,11 +126,9 @@ function setupTaskTitleHandlers() {
 
             if (result && result.new_header_name) {
                 headerNameInput.value = result.new_header_name;
-                // console.log(result.message);
                 setTimeout(() => headerNameInput.blur(), 100);
             }
         } catch (error) {
-            // console.error(error);
             alert('Ошибка при обновлении Header-Title');
         }
     });
@@ -167,7 +165,7 @@ function setupTaskHandlers() {
 
         let result = await dataTransfer(form, formData, null, null, 'PUT');
         if (result && result.task) {
-            console.log(`Значение заметки TaskId: ${result.task.task_id} обновлено на TaskValue: ${result.task.task_title}`);
+            // console.log(`Значение заметки TaskId: ${result.task.task_id} обновлено на TaskValue: ${result.task.task_title}`);
             taskInput.value = result.task.task_title;
         } else {
             console.error(result.error);
@@ -191,11 +189,14 @@ function setupTaskHandlers() {
                     }
                 });
 
+                let result = await response.json();
+
                 if (!response.ok) {
                     console.error(`Ошибка удаления:`, response.status);
+                    if (result.error) {
+                        console.error(result.error);
+                    }
                 }
-
-                let result = await response.json();
                 console.log(result.message);
                 taskElement.remove();
             } catch (error) {

@@ -3,10 +3,11 @@
         {% csrf_token %}
         <input type="text"
             class="task"
+            id="task-{{ task.id }}"
             data-task-id="{{ task.id }}"
             name="task-title"
-            id="task-{{ task.id }}"
             value="{{ task.title }}"
+            maxlength="50"
             autocomplete="off">
         <label for="task-{{ task.id }}" class="visually-hidden">Task</label>
     </form>

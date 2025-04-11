@@ -1,55 +1,55 @@
 import json
-import secrets
-from typing import Tuple
+import uuid
+import datetime
 from django.core.mail import send_mail
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User, Group
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
+from datetime import datetime
 from datetime import timedelta, date
 from django.conf import settings
 
 from .models import Task, PasswordResetToken, HeaderTitle
-
-
-def generate_reset_token():
-    return secrets.token_urlsafe(32)
-
-
-def generate_recovery_message(url: str) -> Tuple[str, str, str]:
-    subject = 'MindFlow: Password recovery'
-    plain_message = f'Follow the link to recover your password: {url}'
-    html_message = f'''
-<html>
-    <body>
-        <h1>MindFlow</h1>
-        <p>You have requested a password reset. Click the link below to set a new password:</p>
-        <a href="{url}">{url}</a>
-        <p>If you have not requested password recovery, ignore this email.</p>
-    </body>
-</html>
-'''
-    return subject, plain_message, html_message
+from tools.tools import (get_session_task, session_task_transfer, generate_reset_token,
+                         generate_recovery_message, create_new_user, is_user_exist)
 
 
 def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     if request.method == 'GET':
         print('Пришел GET запрос в main_view')
         user_header_title = None
+        session_task = get_session_task(request)
         if request.user.is_authenticated:
             print(f'Пришел запрос от авторизованного пользователя - {request.user}')
-            header_obj = HeaderTitle.objects.filter(user=request.user).first()
+            user = request.user
+
+            # Перенос сессионных задач, при наличии
+            if session_task:
+                session_task_transfer(user, session_task)
+                del request.session['session_task']
+
+            tasks = Task.objects.filter(user=user).order_by('-created_at')
+
+            # Подтягиваем заголовок пользователя
+            header_obj = HeaderTitle.objects.filter(user=user).first()
             if header_obj:
                 user_header_title = header_obj.header_title
+        else:
+            # Подготовка и сортировка сессионных задач
+            session_task_sorted = sorted(
+                session_task.items(),
+                key=lambda item: item[1]['created_at'],
+                reverse=True
+            )
+            tasks = [{'id': key, **value} for key, value in session_task_sorted]
 
         context = {
             'date': date.today().strftime('%d/%m/%Y'),
-            # 'tasks': Task.objects.all().reverse().prefetch_related(),
-            'tasks': Task.objects.all().order_by('-id'),
+            'tasks': tasks,
             'user_header_title': user_header_title,
         }
         return render(request, 'notes/index.html', context=context)
@@ -58,55 +58,119 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
 
 def create_task_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
-        print('Пришел POST запрос в create_task_view на добавление новой заметки!')
         try:
             data = json.loads(request.body)
             new_task = data.get('newTask')
-
-            if not new_task:
-                return JsonResponse({'error': 'Заполните значение для заметки, название не должно быть пустым!'},
-                                    status=400)
-
-            new_task: Task = Task.objects.create(title=new_task)
-            task_html = render(request, 'notes/tasks/task.html', {'task': new_task}).content.decode('utf-8')
-
-            return JsonResponse({'message': f'Заметка c task-id: {new_task.id} и task-title: "{new_task.title}" успешно создана!',
-                                 'task_html': task_html}, status=200)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
+
+        if not new_task:
+            return JsonResponse({'error': 'Заполните значение для заметки, название не должно быть пустым!'},
+                                status=400)
+
+        # Авторизованные пользователь
+        if request.user.is_authenticated:
+            print(f'Пришел POST запрос в create_task_view на добавление новой заметки от авторизованного пользователя {request.user}')
+            user = request.user
+
+            # Перевод заметок из сесии в бд
+            session_task = get_session_task(request)
+            if session_task:
+                session_task_transfer(user, session_task)
+                # Очищаем заметки из сессии
+                del request.session['session_task']
+
+            task = Task.objects.create(user=user, title=new_task)
+            task_html = render(request, 'notes/task/task.html', {'task': task}).content.decode('utf-8')
+
+            return JsonResponse({'message': f'Заметка c task-id: {task.id} и task-title: "{task.title}" успешно создана!',
+                                 'task_html': task_html, 'is_completed': task.is_completed}, status=200)
+
+        # Неавторизованный пользователь
+        print('Пришел POST запрос в create_task_view для добавления новой заметки от неавторизованного пользователя')
+        session_task = get_session_task(request)
+        task_id = str(uuid.uuid4())
+        task_data = {
+            'title': new_task,
+            'is_completed': False,
+            'created_at': datetime.now().isoformat(),
+        }
+        session_task[task_id] = task_data
+        request.session['session_task'] = session_task
+
+        task_html = render(request, 'notes/task/task.html', {
+            'task': {'id': task_id, **task_data},
+        }).content.decode('utf-8')
+
+        return JsonResponse({'message': f"Заметка с task-id: {task_id} и task-title: {task_data['title']} успешно создана",
+                             'task_html': task_html, 'is_completed': task_data["is_completed"]}, status=200)
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
 def update_task_view(request, task_id) -> JsonResponse:
     if request.method == 'PUT':
-        print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id}')
         try:
             data = json.loads(request.body)
             task_value = data.get('taskValue')
-            task = Task.objects.get(id=task_id)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
+
+        # Обновление заметок для авторизованного пользователя
+        if request.user.is_authenticated:
+            print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id} от авторизованного пользователя')
+            try:
+                task = Task.objects.get(id=task_id)
+            except Task.DoesNotExist:
+                return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
 
             task.title = task_value
             task.save()
-
             return JsonResponse({'message': f'Успешное обновление заметки c task-id: {task_id}',
                                  'task': {'task_id': task.id, 'task_title': task.title}
                                  }, status=200)
-        except Task.DoesNotExist:
-            return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
+
+        # Обновление заметок для неавторизованного пользователя
+        print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id} от неавторизованного пользователя')
+        task_id_str = str(task_id)
+        session_task = get_session_task(request)
+        task = session_task.get(task_id_str)
+        if not task:
+            return JsonResponse({'error': f'task_id: "{task_id}" не найден в session-task!'}, status=400)
+
+        task['title'] = task_value
+        session_task[task_id_str] = task
+        request.session['session_task'] = session_task
+
+        return JsonResponse({'message': f'Успешное обновление заметки с session-task-id "{task_id}"',
+                             'task': {'task_id': task_id, 'task_title': task['title']}
+                             }, status=200)
+
     return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
 
 
 def delete_task_view(request, task_id) -> JsonResponse:
     if request.method == 'DELETE':
-        print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id}')
-        try:
-            task: Task = Task.objects.get(id=task_id)
-            task.delete()
-            return JsonResponse({'message': f'Заметка task-id: {task_id} успешно удалена!'}, status=200)
-        except Task.DoesNotExist:
-            return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
+        if request.user.is_authenticated:
+            print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id} от авторизованного пользователя')
+            # Удаление заметок для авторизованного пользователя
+            try:
+                task: Task = Task.objects.get(id=task_id)
+                task.delete()
+                return JsonResponse({'message': f'Заметка task-id: "{task_id}" успешно удалена!'}, status=200)
+            except Task.DoesNotExist:
+                return JsonResponse({'error': f'task-id: "{task_id}" не найден в бд!'}, status=400)
+        # Удаление заметок для неавторизованного пользователя
+        print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id} от неавторизованного пользователя')
+        task_id_str = str(task_id) #
+        session_task = get_session_task(request)
+        task = session_task.get(task_id_str)
+        if not task:
+            return JsonResponse({'error': f'Заметка task-id: "{task_id}" не найдена в session-task!'}, status=400)
+
+        del session_task[task_id_str]
+        request.session['session_task'] = session_task
+        return JsonResponse({'message': f'Заметка task-id: "{task_id}" успешно удалена из session-task'}, status=200)
+
     return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
@@ -117,9 +181,11 @@ def update_header_name_view(request: HttpRequest) -> JsonResponse:
             data = json.loads(request.body)
             new_header_name = data.get('newHeaderName')
             if not new_header_name:
-                raise ValueError('Пустое значение')
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
+                raise ValueError('Новое имя заголовка не может быть пустым!')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Ошибка формата JSON'}, status=400)
+        except ValueError as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
         # Неавторизованный пользователь
         if not request.user.is_authenticated:
@@ -146,7 +212,7 @@ def authorization_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
-def authorization_form_view(request: HttpRequest):
+def authorization_form_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
         print('Пришел POST запрос в authorization_form_view')
         try:
@@ -208,45 +274,12 @@ def registration_form_view(request: HttpRequest) -> JsonResponse:
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
-def create_new_user(*args) -> bool | None:
-    user_login, user_email, user_password, request = args
-    try:
-        exist = is_user_exist(user_login, user_email)
-        if not exist:
-            new_user = User.objects.create_user(username=user_login, email=user_email, password=user_password)
-
-            group = Group.objects.get(name='Пользователи приложения')
-            new_user.groups.add(group)
-            permissions = group.permissions.all()
-            new_user.user_permissions.set(permissions)
-
-            if request:
-                user = authenticate(request, username=user_login, password=user_password)
-                if user:
-                    login(request, user)
-            return True
-    except Exception as e:
-        # Реализовать logger
-        print(f"Ошибка при создании пользователя: {e}")
-        return None
-    return False
-
-
-def is_user_exist(user_login=None, user_email=None) -> User | bool:
-    user_by_login = User.objects.filter(username=user_login).first()
-    user_by_email = User.objects.filter(email=user_email).first()
-
-    if user_by_login:
-        return user_by_login
-    if user_by_email:
-        return user_by_email
-
-    return False
-
-
 def logout_view(request: HttpRequest) -> HttpResponse:
     print('Пришел запрос в logout_view')
     logout(request)
+    session_task = get_session_task(request)
+    if session_task:
+        session_task.clear()
     return redirect('main')
 
 
@@ -257,7 +290,7 @@ def password_reset_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
-def password_reset_form_view(request: HttpRequest):
+def password_reset_form_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
         print('Пришел POST запрос в password_reset_form_view')
         try:
@@ -297,7 +330,7 @@ def password_reset_form_view(request: HttpRequest):
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
 
 
-def password_reset_confirm_view(request: HttpRequest, token):
+def password_reset_confirm_view(request: HttpRequest, token) -> HttpResponse | JsonResponse:
     if request.method == 'POST':
         print(f'Пришел POST запрос в password_reset_confirm_view c token: {token}')
         data = json.loads(request.body)
