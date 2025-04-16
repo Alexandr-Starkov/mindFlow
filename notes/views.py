@@ -9,9 +9,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
-from datetime import datetime
-from datetime import timedelta, date
 from django.conf import settings
+from datetime import datetime, timedelta, date
 
 from .models import Task, PasswordResetToken, HeaderTitle
 from tools.tools import (get_session_task, session_task_transfer, generate_reset_token,
@@ -161,7 +160,7 @@ def delete_task_view(request, task_id) -> JsonResponse:
                 return JsonResponse({'error': f'task-id: "{task_id}" не найден в бд!'}, status=400)
         # Удаление заметок для неавторизованного пользователя
         print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id} от неавторизованного пользователя')
-        task_id_str = str(task_id) #
+        task_id_str = str(task_id)
         session_task = get_session_task(request)
         task = session_task.get(task_id_str)
         if not task:

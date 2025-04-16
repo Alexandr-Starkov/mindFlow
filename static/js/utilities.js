@@ -4,9 +4,44 @@ document.addEventListener('DOMContentLoaded', function () {
     setupTaskHandlers();
 });
 
+function checkTasks() {
+    /*
+        Добавляет d-none контейнеру отвечающему за вывод сообщения
+     */
+    const taskItems = document.querySelectorAll('.task-item');
+    const message = document.getElementById('information-message-container');
+
+    if (!message) return;
+
+    if (taskItems.length === 0) {
+        message.classList.remove('d-none');
+        // showMessage();
+    } else {
+        // hideMessage();
+        message.classList.add('d-none');
+    }
+}
+
+// function showMessage() {
+//     let message = document.getElementById('information-message-container');
+//     message.classList.remove('hidden', 'fade-out');
+//     message.classList.add('fade-in');
+// }
+
+// function hideMessage() {
+//     let message = document.getElementById('information-message-container');
+//     message.classList.remove('fade-in');
+//     message.classList.add('fade-out');
+//
+//     message.addEventListener('transitionend', () => {
+//         message.classList.add('hidden');
+//     }, { once: true});
+// }
+
+
 export function getCookie(name) {
     /*
-        Поиск и возврат искомых куки
+        Поиск и возврат искомых печенюх
      */
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -89,6 +124,7 @@ function addTaskToDom(taskHTML) {
     */
     let taskContainer = document.querySelector('#task-container');
     taskContainer.insertAdjacentHTML("afterbegin", taskHTML);  //
+    checkTasks();
 }
 
 function setupTaskTitleHandlers() {
@@ -199,6 +235,7 @@ function setupTaskHandlers() {
                 }
                 console.log(result.message);
                 taskElement.remove();
+                checkTasks();
             } catch (error) {
                 console.error(error);
                 alert('Ошибка при удалении задачи!');

@@ -15,6 +15,8 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+/*    */
+    overflow-x: hidden;
 }
 
 main {
@@ -130,7 +132,7 @@ footer {
     border: none;
     background: transparent;
     outline: none;
-    width: 900px;
+    width: 1200px;
 }
 
 .new-task:focus {
@@ -153,11 +155,37 @@ footer {
 }
 
 .task-form input{
-    width: 600px;
+    width: 900px;
 }
 
 .task {
     font-size: 22px;
     border: none;
     outline: none;
+}
+
+.information-message {
+    align-content: center;
+}
+
+.information {
+    color: #757575;
+}
+
+/*.fade-in {*/
+/*    opacity: 1;*/
+/*    transition: opacity 0.5s ease;*/
+/*}*/
+
+/*.fade-out {*/
+/*    opacity: 0;*/
+/*    transition: opacity 0.5s ease;*/
+/*}*/
+
+/*.hidden {*/
+/*  display: none !important;*/
+/*}*/
+
+.d-none {
+    display: none !important;
 }
