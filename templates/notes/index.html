@@ -2,6 +2,7 @@
 
 {% block header_class %}py-2 mb-1 border-bottom{% endblock %}
 {% block header %}
+    {# Заголовок #}
     <div class="container-fluid d-flex">
         <div class="header-name" id="header-name-container">
             <form class="header-form" id="header-form" method="post" data-url="{% url 'update_header_name' %}">
@@ -93,58 +94,6 @@
         </div>
     </div>
 {% endblock %}
-
-{#{% block main_class %}py-3 mb-2 {% endblock %}#}
-{#{% block main %}#}
-{#    <div class="container-fluid d-flex">#}
-{#        <form class="new-task-form" id="new-task-form" accept-charset="UTF-8" method="post" data-url="{% url 'create_task' %}">#}
-{#            {% csrf_token %}#}
-{#            <h1 class="new-task-h">#}
-{#                <input class="new-task"#}
-{#                    type="text"#}
-{#                    id="new-task"#}
-{#                    autofocus="autofocus"#}
-{#                    placeholder="Write your next task here..."#}
-{#                    required#}
-{#                    maxlength="50"#}
-{#                    autocomplete="off">#}
-{#                <label class="visually-hidden" for="new-task">Add another task</label>#}
-{#            </h1>#}
-{#        </form>#}
-{#    </div>#}
-{##}
-    {# Вывод сообщения при отсутствии тасков #}
-{#    <div class="container-fluid d-flex flex-grow-1 align-items-center justify-content-center">#}
-{#        <div class="complete-message d-flex justify-content-center" id="complete-message">#}
-{#            <h1 class="m-0">All Tasks Complete. Well Done!</h1>#}
-{#        </div>#}
-{#    </div>#}
-{##}
-{#    <div class="container-fluid d-flex">#}
-{#        <div class="task-list" id="task-container">#}
-            {# Вывод тасков #}
-{#            {% for task in tasks %}#}
-{#            <div class="task-item d-flex align-items-center justify-content-between p-3 mb-2 bg-white shadow-sm rounded">#}
-{#                <form class="task-form" data-task-id="{{ task.id }}" data-url="{% url 'update_task' task.id %}">#}
-{#                    {% csrf_token %}#}
-{#                    <input type="text"#}
-{#                        class="task"#}
-{#                        id="task-{{ task.id }}"#}
-{#                        data-task-id="{{ task.id }}"#}
-{#                        name="task-title"#}
-{#                        value="{{ task.title }}"#}
-{#                        maxlength="50"#}
-{#                        autocomplete="off">#}
-{#                    <label for="task-{{ task.id }}" class="visually-hidden">Task</label>#}
-{#                </form>#}
-{#                <button class="btn btn-link text-danger p-0 ms-2 delete-task" data-task-id="{{ task.id }}">#}
-{#                    <i class="bi bi-x-circle"></i>#}
-{#                </button>#}
-{#            </div>#}
-{#            {% endfor %}#}
-{#        </div>#}
-{#    </div>#}
-{#{% endblock %}#}
 
 {% block script %}
     {% load static %}
