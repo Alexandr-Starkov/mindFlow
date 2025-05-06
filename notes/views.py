@@ -253,68 +253,6 @@ def update_task_view(request: HttpRequest, uuid_task_id) -> JsonResponse:
                              'task': {'task_id': str_uuid_task_id, 'task_title': task['title']}
                              }, status=200)
 
-        # Обновление задачи для авторизованного пользователя
-        # if request.user.is_authenticated:
-        #     print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от авторизованного пользователя')
-        #     user = request.user
-        #     task = Task.objects.get(id=uuid_task_id)
-        #
-        #     if not task:
-        #         # Обновление завершенной задачи
-        #         complete_task = CompleteTask.objects.get(id=uuid_task_id)
-        #         if not complete_task:
-        #             return JsonResponse({'error': 'Ошибка при обновлении, задача не найдена в бд!'}, status=404)
-        #
-        #         # Проверка прав на обновление задачи
-        #         if not has_permissions(user, complete_task.user):
-        #             return JsonResponse({'error': 'Доступ заперещен!'}, status=403)
-        #
-        #         complete_task.title = task_value
-        #         complete_task.updated_at = timezone.now().isoformat()
-        #         complete_task.save()
-        #         return JsonResponse({'message': 'Успешное обновление задачи!',
-        #                              'task': {'task_id': complete_task.id}, 'task_title': complete_task.title
-        #                              }, status=200)
-        #
-        #     # Проверка прав на обновление задачи
-        #     if not has_permissions(user, task.user):
-        #         return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
-        #
-        #     # Обновление незавершенной задачи
-        #     task.title = task_value
-        #     task.updated_at = timezone.now().isoformat()
-        #     task.save()
-        #     return JsonResponse({'message': 'Успешное обновление задачи!',
-        #                          'task': {'task_id': task.id, 'task_title': task.title}
-        #                          }, status=200)
-        #
-        # # Обновление задачи для неавторизованного пользователя
-        # print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
-        # task_id_str = str(uuid_task_id)
-        # session_task = get_session_task(request)
-        # task = session_task.get(task_id_str)
-        # if not task:
-        #     # Обновление завершенной задачи
-        #     complete_session_task = get_complete_session_task(request)
-        #     task = complete_session_task.get(task_id_str)
-        #     if not task:
-        #         return JsonResponse({'error': f'Ошибка при обновлении задачи, задача не найдна в сессии!'}, status=404)
-        #
-        #     task['title'] = task_value
-        #     task['update_at'] = timezone.now().isoformat()
-        #     complete_session_task[task_id_str] = task
-        #     request.session['complete_session_task'] = complete_session_task
-        #     return JsonResponse({'message': 'Успешное обновление задачи!'}, status=200)
-        # # Обновление незавершенной задачи
-        # task['title'] = task_value
-        # task['update_at'] = timezone.now().isoformat()
-        # session_task[task_id_str] = task
-        # request.session['session_task'] = session_task
-        #
-        # return JsonResponse({'message': 'Успешное обновление задачи!',
-        #                      'task': {'task_id': uuid_task_id, 'task_title': task['title']}
-        #                      }, status=200)
-
     return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
 
 
@@ -365,38 +303,6 @@ def delete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonRespo
             return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
 
         return JsonResponse({'error': 'Ошибка при удалении задачи, задача не найдена в сессии'}, status=404)
-
-    #         # Удаление задачи для авторизованного пользователя
-    #         try:
-    #             task: Task = Task.objects.get(id=uuid_task_id)
-    #             # Проверка прав на удаление задачи
-    #             if not has_permissions(request.user, task.user):
-    #                 return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
-    #
-    #             task.delete()
-    #             return JsonResponse({'message': f'Задача успешно удалена!'}, status=200)
-    #         except Task.DoesNotExist:
-    #             return JsonResponse({'error': f'Ошибка при удалении задачи, задача не найдена в бд!'}, status=404)
-    #     # Удаление задачи для неавторизованного пользователя
-    #     print(f'Пришел DELETE запрос в delete_task_view на удаление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
-    #     task_id_str = str(uuid_task_id)
-    #     session_task = get_session_task(request)
-    #     task = session_task.get(task_id_str)
-    #     if not task:
-    #         # Удаление завершенной задачи
-    #         complete_session_task = get_complete_session_task(request)
-    #         task = complete_session_task.get(task_id_str)
-    #         if not task:
-    #             return JsonResponse({'error': 'Ошибка при удалении, задача не найдена в сессии!'}, status=404)
-    #
-    #         del complete_session_task[task_id_str]
-    #         request.session['complete_session_task'] = complete_session_task
-    #         return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
-    #     # Удаление незавершенной задачи
-    #     del session_task[task_id_str]
-    #     request.session['session_task'] = session_task
-    #     return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
-    #
     return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
 
 
