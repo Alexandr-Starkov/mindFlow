@@ -8,7 +8,7 @@ from django.http import HttpRequest
 from django.contrib.auth.models import User, Group
 from django.contrib.auth import authenticate, login
 
-from notes.models import Task
+from notes.models import Task, CompleteTask
 
 
 def generate_reset_token() -> str:
@@ -81,21 +81,67 @@ def is_user_exist(user_login=None, user_email=None) -> User | bool:
 
 def get_session_task(request: HttpRequest) -> dict:
     """
-    Создание/Возврат словаря в пределах сессии для заметок
+    Создание/Возврат словаря сессионных задач
     """
     return request.session.setdefault('session_task', {})
 
 
+def get_complete_session_task(request: HttpRequest) -> dict:
+    """
+    Создание/Возврат словаря сессионных завершенных задач
+    """
+    return request.session.setdefault('complete_session_task', {})
+
+
 def session_task_transfer(user: User, session_tasks: dict):
     """
-    Перевод заметок из сессии в бд
+    Перевод незавершенных задач из сессии в бд
     """
     for id_key in session_tasks.keys():
         try:
             task_id = UUID(id_key)
             title = session_tasks.get(id_key, {}).get('title')
+            created_at = session_tasks.get(id_key, {}).get('created_at')
+            updated_at = session_tasks.get(id_key, {}).get('updated_at')
             is_completed = session_tasks.get(id_key, {}).get('is_completed')
-            Task.objects.create(id=task_id, user=user, title=title, is_completed=is_completed)
+
+            Task.objects.create(id=task_id,
+                                user=user,
+                                title=title,
+                                created_at=created_at,
+                                updated_at=updated_at,
+                                is_completed=is_completed)
         except Exception as e:
-            print(f"Ошибка при создании task'a в session_task_transfer: {e}")
+            print(f"Ошибка при переводе незавершенной задачи из сессии в бд: {e}")
             return
+
+
+def complete_session_task_transfer(user: User, complete_session_tasks: dict):
+    """
+    Перевод завершенных задач из сессии в бд
+    """
+    for id_key in complete_session_tasks:
+        try:
+            task_id = UUID(id_key)
+            title = complete_session_tasks.get(id_key, {}).get('title')
+            created_at = complete_session_tasks.get(id_key, {}).get('created_at')
+            updated_at = complete_session_tasks.get(id_key, {}).get('updated_at')
+            completed_at = complete_session_tasks.get(id_key, {}).get('completed_at')
+            is_completed = complete_session_tasks.get(id_key, {}).get('is_completed')
+
+            CompleteTask.objects.create(id=task_id,
+                                        user=user,
+                                        title=title,
+                                        created_at=created_at,
+                                        updated_at=updated_at,
+                                        completed_at=completed_at,
+                                        is_completed=is_completed)
+        except Exception as e:
+            print(f"Ошибка при переводе завершенной задачи из сессии в бд: {e}")
+
+
+def has_permissions(user, user_obj):
+    """
+    Проверка прав пользователя
+    """
+    return user == user_obj

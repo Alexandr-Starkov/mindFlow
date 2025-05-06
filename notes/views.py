@@ -1,6 +1,6 @@
 import json
 import uuid
-import datetime
+from typing import Union
 from django.core.mail import send_mail
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -9,12 +9,13 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
+from datetime import timedelta, date
 from django.conf import settings
-from datetime import datetime, timedelta, date
+from django.db import IntegrityError
 
-from .models import Task, PasswordResetToken, HeaderTitle
-from tools.tools import (get_session_task, session_task_transfer, generate_reset_token,
-                         generate_recovery_message, create_new_user, is_user_exist)
+from .models import Task, CompleteTask, PasswordResetToken, HeaderTitle
+from tools.tools import (get_session_task, get_complete_session_task, session_task_transfer, complete_session_task_transfer,
+                         generate_reset_token, generate_recovery_message, create_new_user, is_user_exist, has_permissions)
 
 
 def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
@@ -22,23 +23,32 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
         print('Пришел GET запрос в main_view')
         user_header_title = None
         session_task = get_session_task(request)
+        complete_session_task = get_complete_session_task(request)
+        print('DEBUG before save:', complete_session_task)
+        print('DEBUG type:', type(complete_session_task))
         if request.user.is_authenticated:
             print(f'Пришел запрос от авторизованного пользователя - {request.user}')
             user = request.user
 
-            # Перенос сессионных задач, при наличии
+            # Перенос сессионных незавершенных задач, при наличии
             if session_task:
                 session_task_transfer(user, session_task)
                 del request.session['session_task']
 
             tasks = Task.objects.filter(user=user).order_by('-created_at')
 
+            # Перенос сессионных завершенных задач, при наличии
+            if complete_session_task:
+                complete_session_task_transfer(user, complete_session_task)
+                del request.session['complete_session_task']
+
+            complete_tasks = CompleteTask.objects.filter(user=user).order_by('-completed_at')
+
             # Подтягиваем заголовок пользователя
             header_obj = HeaderTitle.objects.filter(user=user).first()
-            if header_obj:
-                user_header_title = header_obj.header_title
+            user_header_title = header_obj.header_title if header_obj else None
         else:
-            # Подготовка и сортировка сессионных задач
+            # Подготовка и сортировка незавершенных сессионных задач
             session_task_sorted = sorted(
                 session_task.items(),
                 key=lambda item: item[1]['created_at'],
@@ -46,141 +56,32 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
             )
             tasks = [{'id': key, **value} for key, value in session_task_sorted]
 
+            # Подготовка и сортировка завершенных сессионных задач
+            complete_session_task_sorted = sorted(
+                complete_session_task.items(),
+                key=lambda item: item[1]['completed_at'],
+                reverse=True
+            )
+            complete_tasks = [{'id': key, **value} for key, value in complete_session_task_sorted]
+
         context = {
-            'date': date.today().strftime('%d/%m/%Y'),
             'tasks': tasks,
+            'complete_tasks': complete_tasks,
             'user_header_title': user_header_title,
+            'date': date.today().strftime('%d/%m/%Y'),
         }
         return render(request, 'notes/index.html', context=context)
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
-def create_task_view(request: HttpRequest) -> JsonResponse:
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            new_task = data.get('newTask')
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
-
-        if not new_task:
-            return JsonResponse({'error': 'Заполните значение для заметки, название не должно быть пустым!'},
-                                status=400)
-
-        # Авторизованные пользователь
-        if request.user.is_authenticated:
-            print(f'Пришел POST запрос в create_task_view на добавление новой заметки от авторизованного пользователя {request.user}')
-            user = request.user
-
-            # Перевод заметок из сесии в бд
-            session_task = get_session_task(request)
-            if session_task:
-                session_task_transfer(user, session_task)
-                # Очищаем заметки из сессии
-                del request.session['session_task']
-
-            task = Task.objects.create(user=user, title=new_task)
-            task_html = render(request, 'notes/task/task.html', {'task': task}).content.decode('utf-8')
-
-            return JsonResponse({'message': f'Заметка c task-id: {task.id} и task-title: "{task.title}" успешно создана!',
-                                 'task_html': task_html, 'is_completed': task.is_completed}, status=200)
-
-        # Неавторизованный пользователь
-        print('Пришел POST запрос в create_task_view для добавления новой заметки от неавторизованного пользователя')
-        session_task = get_session_task(request)
-        task_id = str(uuid.uuid4())
-        task_data = {
-            'title': new_task,
-            'is_completed': False,
-            'created_at': datetime.now().isoformat(),
-        }
-        session_task[task_id] = task_data
-        request.session['session_task'] = session_task
-
-        task_html = render(request, 'notes/task/task.html', {
-            'task': {'id': task_id, **task_data},
-        }).content.decode('utf-8')
-
-        return JsonResponse({'message': f"Заметка с task-id: {task_id} и task-title: {task_data['title']} успешно создана",
-                             'task_html': task_html, 'is_completed': task_data["is_completed"]}, status=200)
-    return JsonResponse({'error': 'Только POST запросы!'}, status=405)
-
-
-def update_task_view(request, task_id) -> JsonResponse:
-    if request.method == 'PUT':
-        try:
-            data = json.loads(request.body)
-            task_value = data.get('taskValue')
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
-
-        # Обновление заметок для авторизованного пользователя
-        if request.user.is_authenticated:
-            print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id} от авторизованного пользователя')
-            try:
-                task = Task.objects.get(id=task_id)
-            except Task.DoesNotExist:
-                return JsonResponse({'error': f'task-id: {task_id} не найден в бд!'}, status=400)
-
-            task.title = task_value
-            task.save()
-            return JsonResponse({'message': f'Успешное обновление заметки c task-id: {task_id}',
-                                 'task': {'task_id': task.id, 'task_title': task.title}
-                                 }, status=200)
-
-        # Обновление заметок для неавторизованного пользователя
-        print(f'Пришел PUT запрос в update_task_view на обновление заметки task-id: {task_id} от неавторизованного пользователя')
-        task_id_str = str(task_id)
-        session_task = get_session_task(request)
-        task = session_task.get(task_id_str)
-        if not task:
-            return JsonResponse({'error': f'task_id: "{task_id}" не найден в session-task!'}, status=400)
-
-        task['title'] = task_value
-        session_task[task_id_str] = task
-        request.session['session_task'] = session_task
-
-        return JsonResponse({'message': f'Успешное обновление заметки с session-task-id "{task_id}"',
-                             'task': {'task_id': task_id, 'task_title': task['title']}
-                             }, status=200)
-
-    return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
-
-
-def delete_task_view(request, task_id) -> JsonResponse:
-    if request.method == 'DELETE':
-        if request.user.is_authenticated:
-            print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id} от авторизованного пользователя')
-            # Удаление заметок для авторизованного пользователя
-            try:
-                task: Task = Task.objects.get(id=task_id)
-                task.delete()
-                return JsonResponse({'message': f'Заметка task-id: "{task_id}" успешно удалена!'}, status=200)
-            except Task.DoesNotExist:
-                return JsonResponse({'error': f'task-id: "{task_id}" не найден в бд!'}, status=400)
-        # Удаление заметок для неавторизованного пользователя
-        print(f'Пришел DELETE запрос в delete_task_view на удаление заметки task-id: {task_id} от неавторизованного пользователя')
-        task_id_str = str(task_id)
-        session_task = get_session_task(request)
-        task = session_task.get(task_id_str)
-        if not task:
-            return JsonResponse({'error': f'Заметка task-id: "{task_id}" не найдена в session-task!'}, status=400)
-
-        del session_task[task_id_str]
-        request.session['session_task'] = session_task
-        return JsonResponse({'message': f'Заметка task-id: "{task_id}" успешно удалена из session-task'}, status=200)
-
-    return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
-
-
 def update_header_name_view(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
-        print('Пришел POST запрос в update_header_name_view на обновление Header-Title')
+        print('Пришел POST запрос в update_header_name_view на обновление заголовка')
         try:
             data = json.loads(request.body)
             new_header_name = data.get('newHeaderName')
             if not new_header_name:
-                raise ValueError('Новое имя заголовка не может быть пустым!')
+                return JsonResponse({'error': 'Новое имя заголовка не может быть пустым!'}, status=403)
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Ошибка формата JSON'}, status=400)
         except ValueError as e:
@@ -194,6 +95,10 @@ def update_header_name_view(request: HttpRequest) -> JsonResponse:
 
         # Авторизованный пользователь
         header_obj, created = HeaderTitle.objects.get_or_create(user=request.user)
+        # Проверка прав на изменение заголовка
+        if not has_permissions(request.user, header_obj.user):
+            return JsonResponse({'error': 'Доступ заперещен!'}, status=403)
+
         header_obj.header_title = new_header_name
         header_obj.save()
 
@@ -202,6 +107,425 @@ def update_header_name_view(request: HttpRequest) -> JsonResponse:
             'new_header_name': header_obj.header_title,
         }, status=200)
     return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+
+
+def create_task_view(request: HttpRequest) -> JsonResponse:
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            new_task = data.get('newTask')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Проверьте введенные данные!'}, status=400)
+
+        if not new_task:
+            return JsonResponse({'error': 'Заполните значение для задачи, название не должно быть пустым!'},
+                                status=400)
+
+        # Авторизованные пользователь
+        if request.user.is_authenticated:
+            print(f'Пришел POST запрос в create_task_view на добавление новой задачи от авторизованного пользователя {request.user}')
+            user = request.user
+
+            # Перевод незаконченных задач из сессии в бд
+            session_task = get_session_task(request)
+            if session_task:
+                session_task_transfer(user, session_task)
+                # Очищаем незаконченные задачи из сессии
+                del request.session['session_task']
+            # Перевод законченных задач из сессии в бд
+            complete_session_task = get_complete_session_task(request)
+            if complete_session_task:
+                complete_session_task_transfer(user, complete_session_task)
+                # Очищаем законченные задачи из сессии
+                del request.session['complete_session_task']
+
+            task = Task.objects.create(user=user, title=new_task)
+            task_html = render(request, 'notes/task/task.html', {'task': task}).content.decode('utf-8')
+
+            return JsonResponse({'message': f'Задача c task-id: {task.id} и task-title: "{task.title}" успешно создана!',
+                                 'task_html': task_html, 'is_completed': task.is_completed}, status=200)
+
+        # Неавторизованный пользователь
+        print('Пришел POST запрос в create_task_view для добавления новой задачи от неавторизованного пользователя')
+        session_task = get_session_task(request)
+        task_id = str(uuid.uuid4())
+        task_data = {
+            'title': new_task,
+            'is_completed': False,
+            'created_at': timezone.now().isoformat(),
+        }
+        session_task[task_id] = task_data
+        request.session['session_task'] = session_task
+
+        task_html = render(request, 'notes/task/task.html', {
+            'task': {'id': task_id, **task_data},
+        }).content.decode('utf-8')
+
+        return JsonResponse({'message': f"Задача с task-id: {task_id} и task-title: {task_data['title']} успешно создана",
+                             'task_html': task_html, 'is_completed': task_data["is_completed"]}, status=200)
+    return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+
+
+def _get_task_or_complete_task(uuid_task_id: uuid.UUID) -> Union[Task, CompleteTask] | None:
+    """
+    Получить задачу по uuid_task_id
+    """
+    try:
+        return Task.objects.get(id=uuid_task_id)
+    except Task.DoesNotExist:
+        try:
+            return CompleteTask.objects.get(id=uuid_task_id)
+        except CompleteTask.DoesNotExist:
+            return None
+
+
+def _update_db_task(task_obj: Task, task_value: str) -> Task:
+    """
+    Обновление задачи(DB)
+    """
+    task_obj.title = task_value
+    task_obj.updated_at = timezone.now().isoformat()
+    task_obj.save()
+    return task_obj
+
+
+def _update_session_task(session_dict: dict, str_uuid_task_id: str, task_value: str):
+    """
+    Обновление задачи(сессия)
+    """
+    task = session_dict.get(str_uuid_task_id)
+    if task:
+        task['title'] = task_value
+        task['updated_at'] = timezone.now().isoformat()
+        session_dict[str_uuid_task_id] = task
+    return task
+
+
+def update_task_view(request: HttpRequest, uuid_task_id) -> JsonResponse:
+    if request.method == 'PUT':
+        try:
+            data = json.loads(request.body)
+            task_value = data.get('taskValue')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Проверьте введенные данные'}, status=400)
+
+        # Обноавление задачи для авторизованного пользователя
+        if request.user.is_authenticated:
+            print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от авторизованного пользователя: {request.user}')
+            user = request.user
+            task = _get_task_or_complete_task(uuid_task_id)
+
+            if not task:
+                return JsonResponse({'error': 'Ошибка при обновлении, задача не найдена в бд!'}, status=404)
+
+            # Проверка прав на изменение задачи
+            if not has_permissions(user, task.user):
+                return JsonResponse({'error': 'Доступ заперещен!'}, status=403)
+
+            task = _update_db_task(task, task_value)
+            return JsonResponse({'message': 'Успешное обновление задачи',
+                                 'task': {'task_id': task.id, 'task_title': task.title}
+                                 }, status=200)
+
+        # Обновление задачи для неавторизованного пользователя
+        print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от авторизованного пользователя: {request.user}')
+        # Обновление для незавершенной задачи
+        str_uuid_task_id = str(uuid_task_id)
+        session_task = get_session_task(request)
+
+        if str_uuid_task_id not in session_task:
+            # Обновление для завершенной задачи
+            complete_session_task = get_complete_session_task(request)
+            if str_uuid_task_id not in complete_session_task:
+                return JsonResponse({'error': 'Ошибка при обновлении, задача не найдена в сесии!'}, status=404)
+
+            complete_task = _update_session_task(complete_session_task, str_uuid_task_id, task_value)
+            # Сохраняем состояние сессии
+            request.session['complete_session_task'] = complete_session_task
+            return JsonResponse({'message': 'Успешное обновление задачи!',
+                                 'task': {'task_id': str_uuid_task_id, 'task_title': complete_task['title']}
+                                 }, status=200)
+
+        task = _update_session_task(session_task, str_uuid_task_id, task_value)
+        # Сохраняем состояние сессии
+        request.session['session_task'] = session_task
+        return JsonResponse({'message': 'Успешное обновление задачи!',
+                             'task': {'task_id': str_uuid_task_id, 'task_title': task['title']}
+                             }, status=200)
+
+        # Обновление задачи для авторизованного пользователя
+        # if request.user.is_authenticated:
+        #     print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от авторизованного пользователя')
+        #     user = request.user
+        #     task = Task.objects.get(id=uuid_task_id)
+        #
+        #     if not task:
+        #         # Обновление завершенной задачи
+        #         complete_task = CompleteTask.objects.get(id=uuid_task_id)
+        #         if not complete_task:
+        #             return JsonResponse({'error': 'Ошибка при обновлении, задача не найдена в бд!'}, status=404)
+        #
+        #         # Проверка прав на обновление задачи
+        #         if not has_permissions(user, complete_task.user):
+        #             return JsonResponse({'error': 'Доступ заперещен!'}, status=403)
+        #
+        #         complete_task.title = task_value
+        #         complete_task.updated_at = timezone.now().isoformat()
+        #         complete_task.save()
+        #         return JsonResponse({'message': 'Успешное обновление задачи!',
+        #                              'task': {'task_id': complete_task.id}, 'task_title': complete_task.title
+        #                              }, status=200)
+        #
+        #     # Проверка прав на обновление задачи
+        #     if not has_permissions(user, task.user):
+        #         return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
+        #
+        #     # Обновление незавершенной задачи
+        #     task.title = task_value
+        #     task.updated_at = timezone.now().isoformat()
+        #     task.save()
+        #     return JsonResponse({'message': 'Успешное обновление задачи!',
+        #                          'task': {'task_id': task.id, 'task_title': task.title}
+        #                          }, status=200)
+        #
+        # # Обновление задачи для неавторизованного пользователя
+        # print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
+        # task_id_str = str(uuid_task_id)
+        # session_task = get_session_task(request)
+        # task = session_task.get(task_id_str)
+        # if not task:
+        #     # Обновление завершенной задачи
+        #     complete_session_task = get_complete_session_task(request)
+        #     task = complete_session_task.get(task_id_str)
+        #     if not task:
+        #         return JsonResponse({'error': f'Ошибка при обновлении задачи, задача не найдна в сессии!'}, status=404)
+        #
+        #     task['title'] = task_value
+        #     task['update_at'] = timezone.now().isoformat()
+        #     complete_session_task[task_id_str] = task
+        #     request.session['complete_session_task'] = complete_session_task
+        #     return JsonResponse({'message': 'Успешное обновление задачи!'}, status=200)
+        # # Обновление незавершенной задачи
+        # task['title'] = task_value
+        # task['update_at'] = timezone.now().isoformat()
+        # session_task[task_id_str] = task
+        # request.session['session_task'] = session_task
+        #
+        # return JsonResponse({'message': 'Успешное обновление задачи!',
+        #                      'task': {'task_id': uuid_task_id, 'task_title': task['title']}
+        #                      }, status=200)
+
+    return JsonResponse({'error': 'Только PUT запросы!'}, status=405)
+
+
+def _delete_session_task(session_dict: dict, str_uuid_task_id: str) -> bool:
+    """
+    Удаление задачи(сессия)
+    """
+    if str_uuid_task_id in session_dict:
+        task = session_dict.pop(str_uuid_task_id)
+        if task:
+            return True
+        return False
+    return False
+
+
+def delete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonResponse:
+    if request.method == 'DELETE':
+        if request.user.is_authenticated:
+            # Удаление задачи для авторизованного пользователя
+            print(f'Пришел DELETE запрос в delete_task_view на удаление задачи task-id: {uuid_task_id} от авторизованного пользователя: {request.user}')
+            user = request.user
+            task = _get_task_or_complete_task(uuid_task_id)
+            if not task:
+                return JsonResponse({'error': 'Ошибка при удалении задачи, задача не найдена в бд!'}, status=404)
+
+            # Проверка прав на удаление задачи
+            if not has_permissions(user, task.user):
+                return JsonResponse({'error': 'Доступ заблокирован'}, status=403)
+
+            task.delete()
+            return JsonResponse({'message': 'Задача успешно удалена'}, status=200)
+
+        # Удаление задачи для неавторизованного пользователя
+        print(f'Пришел DELETE запрос в delete_task_view на удаление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
+        str_uuid_task_id = str(uuid_task_id)
+        # Удаление незавершенной задачи
+        session_task = get_session_task(request)
+        if str_uuid_task_id in session_task:
+            is_deleted = _delete_session_task(session_task, str_uuid_task_id)
+            request.session['session_task'] = session_task
+            return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
+
+        # Удаление завершенной задачи
+        complete_session_task = get_complete_session_task(request)
+        if str_uuid_task_id in complete_session_task:
+            is_deleted = _delete_session_task(complete_session_task, str_uuid_task_id)
+            request.session['complete_session_task'] = complete_session_task
+            return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
+
+        return JsonResponse({'error': 'Ошибка при удалении задачи, задача не найдена в сессии'}, status=404)
+
+    #         # Удаление задачи для авторизованного пользователя
+    #         try:
+    #             task: Task = Task.objects.get(id=uuid_task_id)
+    #             # Проверка прав на удаление задачи
+    #             if not has_permissions(request.user, task.user):
+    #                 return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
+    #
+    #             task.delete()
+    #             return JsonResponse({'message': f'Задача успешно удалена!'}, status=200)
+    #         except Task.DoesNotExist:
+    #             return JsonResponse({'error': f'Ошибка при удалении задачи, задача не найдена в бд!'}, status=404)
+    #     # Удаление задачи для неавторизованного пользователя
+    #     print(f'Пришел DELETE запрос в delete_task_view на удаление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
+    #     task_id_str = str(uuid_task_id)
+    #     session_task = get_session_task(request)
+    #     task = session_task.get(task_id_str)
+    #     if not task:
+    #         # Удаление завершенной задачи
+    #         complete_session_task = get_complete_session_task(request)
+    #         task = complete_session_task.get(task_id_str)
+    #         if not task:
+    #             return JsonResponse({'error': 'Ошибка при удалении, задача не найдена в сессии!'}, status=404)
+    #
+    #         del complete_session_task[task_id_str]
+    #         request.session['complete_session_task'] = complete_session_task
+    #         return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
+    #     # Удаление незавершенной задачи
+    #     del session_task[task_id_str]
+    #     request.session['session_task'] = session_task
+    #     return JsonResponse({'message': 'Задача успешно удалена!'}, status=200)
+    #
+    return JsonResponse({'error': "Только DELETE запросы!"}, status=405)
+
+
+def _complete_task_for_authenticated_user(user: str, uuid_task_id: uuid.UUID):
+    # Декомпозиция complete_task_view для авторизованного пользователя
+    ...
+
+
+def _complete_task_for_guest(request: HttpRequest, uuid_task_id: uuid.UUID):
+    # Декомпозиция complete_task_view для неавторизованного пользователя
+    ...
+
+
+def complete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonResponse:
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+
+    # Завершение задачи для авторизованного пользователя
+    if request.user.is_authenticated:
+        print(f'Пришел запрос в {complete_task_view.__name__} для завершения задачи от авторизованного пользователя!')
+        user = request.user
+        try:
+            task = Task.objects.get(id=uuid_task_id)
+        except Task.DoesNotExist:
+            return JsonResponse({'error': 'Задача не найдена!'}, status=404)
+
+        # Проверка прав на завершение задачи
+        if not has_permissions(user, task.user):
+            return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
+
+        # Перенос задачи в заврешенные
+        try:
+            complete_task = CompleteTask.objects.create(id=task.id,
+                                                        user=user,
+                                                        title=task.title,
+                                                        created_at=task.created_at,
+                                                        updated_at=task.updated_at,
+                                                        completed_at=timezone.now().isoformat(),
+                                                        is_completed=True)
+        except IntegrityError:
+            return JsonResponse({'error': 'Ошибка при завершении задачи!'}, status=404)
+
+        task.delete()
+        return JsonResponse({'message': 'Задача переведена в список завершенных!'}, status=200)
+
+    # Завершение задачи для неавторизованного пользователя
+    print(f'Пришел запрос в {complete_task_view.__name__} для завершения задачи от неавторизованного пользователя!')
+    session_task = get_session_task(request)
+    complete_session_task = get_complete_session_task(request)
+    str_task_id = str(uuid_task_id)
+
+    task = session_task.get(str_task_id)
+    if not task:
+        return JsonResponse({'error': f'Ошибка при завершении задачи!'}, status=404)
+
+    # Перенос задачи
+    task['is_completed'] = True
+    task['completed_at'] = timezone.now().isoformat()
+    complete_session_task[str_task_id] = task
+    del session_task[str_task_id]
+
+    # Сохранение состояния сессий
+    request.session['session_task'] = session_task
+    request.session['complete_session_task'] = complete_session_task
+
+    return JsonResponse({'message': 'Задача переведена в список завершенных!'}, status=200)
+
+
+def _incomplete_task_for_authenticated_user(user: str, task_id: uuid.UUID):
+    # Декомпозиция incomplete_task_view для авторизованного пользователя
+    ...
+
+
+def _incomplete_task_for_guest(request: HttpRequest, task_id: uuid.UUID):
+    # Декомпозиция incomplete_task_view для неавторизованного пользователя
+    ...
+
+
+def incomplete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonResponse:
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Только POST запросы!'}, status=405)
+    # Возврат задачи в статус незавершенной для авторизованного пользователя
+    if request.user.is_authenticated:
+        print(f'Пришел запрос в {complete_task_view.__name__} от авторизованного пользователя для возврата задачи!')
+        user = request.user
+        try:
+            complete_task = CompleteTask.objects.get(id=uuid_task_id)
+        except CompleteTask.DoesNotExist:
+            return JsonResponse({'error': 'Завершенная задача не найдена!'}, status=404)
+
+        # Проверка прав на завершение задачи
+        if not has_permissions(user, complete_task.user):
+            return JsonResponse({'error': 'Доступ запрещен!'}, status=403)
+
+        # Перенос задачи в незавершенные
+        try:
+            task = Task.objects.create(id=uuid_task_id,
+                                       user=complete_task.user,
+                                       title=complete_task.title,
+                                       created_at=timezone.now().isoformat(),
+                                       updated_at=complete_task.updated_at,
+                                       is_completed=False)
+        except IntegrityError:
+            return JsonResponse({'error': 'Ошибка при переводе задачи в незавершенные'}, status=404)
+
+        complete_task.delete()
+        return JsonResponse({'message': 'Задача переведена в список незавершенных!'}, status=200)
+
+    # Возврат задачи в статус незавершенной для неавторизованного пользователя
+    print(f'Пришел запрос в {complete_task_view.__name__} от неавторизованного пользователя для возврата задачи!')
+    session_task = get_session_task(request)
+    complete_session_task = get_complete_session_task(request)
+    str_uuid_task_id = str(uuid_task_id)
+
+    task = complete_session_task.get(str_uuid_task_id)
+    if not task:
+        return JsonResponse({'error': f'Задача не найдена в сесии!'}, status=404)
+
+    # Перевод задачи в статус незавершенной
+    task['is_completed'] = False
+    task.pop('completed_at', None)
+    session_task[str_uuid_task_id] = task
+    del complete_session_task[str_uuid_task_id]
+
+    # Сохраненение состояний сессий
+    request.session['session_task'] = session_task
+    request.session['complete_session_task'] = complete_session_task
+
+    return JsonResponse({'message': 'Задача переведена в список незавершенных!'}, status=200)
 
 
 def authorization_view(request: HttpRequest) -> HttpResponse | JsonResponse:

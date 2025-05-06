@@ -15,7 +15,6 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-/*    */
     overflow-x: hidden;
 }
 
@@ -154,14 +153,23 @@ footer {
     background-color: #f8f9fa;
 }
 
-.task-form input{
-    width: 900px;
+.task-form input {
+    width: 220%;
 }
 
 .task {
     font-size: 22px;
     border: none;
     outline: none;
+}
+
+.task.completed {
+    text-decoration: line-through;
+    color: #ced4da;
+}
+
+#information-message-container {
+    min-height: 300px;
 }
 
 .information-message {
@@ -188,4 +196,38 @@ footer {
 
 .d-none {
     display: none !important;
+}
+
+.task-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #ced4da;
+    border-radius: 4px;
+    position: relative;
+    background-color: #fff;
+    transition: border-color 0.2s ease-in-out;
+}
+
+.task-checkbox:hover {
+    border-color: #0D6EFD;
+}
+
+.task-checkbox:checked {
+    background-color: #ced4da;
+    border-color: #ced4da;
+}
+
+.task-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
 }

@@ -1,47 +1,13 @@
 
 document.addEventListener('DOMContentLoaded', function () {
     setupTaskTitleHandlers();
-    setupTaskHandlers();
+    setupTaskHandlers('#task-container');
+    setupTaskHandlers('#completed-task-container');
 });
-
-function checkTasks() {
-    /*
-        Добавляет d-none контейнеру отвечающему за вывод сообщения
-     */
-    const taskItems = document.querySelectorAll('.task-item');
-    const message = document.getElementById('information-message-container');
-
-    if (!message) return;
-
-    if (taskItems.length === 0) {
-        message.classList.remove('d-none');
-        // showMessage();
-    } else {
-        // hideMessage();
-        message.classList.add('d-none');
-    }
-}
-
-// function showMessage() {
-//     let message = document.getElementById('information-message-container');
-//     message.classList.remove('hidden', 'fade-out');
-//     message.classList.add('fade-in');
-// }
-
-// function hideMessage() {
-//     let message = document.getElementById('information-message-container');
-//     message.classList.remove('fade-in');
-//     message.classList.add('fade-out');
-//
-//     message.addEventListener('transitionend', () => {
-//         message.classList.add('hidden');
-//     }, { once: true});
-// }
-
 
 export function getCookie(name) {
     /*
-        Поиск и возврат искомых печенюх
+        Поиск и возврат искомых cookies
      */
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -66,8 +32,8 @@ export async function dataTransfer(form, formData, successCallback = null, error
         let response = await fetch(form.dataset.url, {
             method: method,
             headers: {
-                'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify(formData)
         });
@@ -88,12 +54,13 @@ export async function dataTransfer(form, formData, successCallback = null, error
                 errorCallback(result.error, result);
             } else {
                 alert(result.error);
+                return;
             }
         }
 
         // Обработка успешного сообщения
         if (result.message) {
-            console.log('Сообщение:',result.message);
+            console.log(result.message);
             if (typeof successCallback === 'function') {
                 successCallback(result.message, result);
             }
@@ -114,7 +81,7 @@ export async function dataTransfer(form, formData, successCallback = null, error
         return result;
     } catch (error) {
         console.error("Обнаружена ошибка попробуйте позже");
-        alert("Ошибка попробуйте позже!");
+        alert("Обнаружена ошибка попробуйте позже!");
     }
 }
 
@@ -124,12 +91,12 @@ function addTaskToDom(taskHTML) {
     */
     let taskContainer = document.querySelector('#task-container');
     taskContainer.insertAdjacentHTML("afterbegin", taskHTML);  //
-    checkTasks();
+    updateContainerVisibility();
 }
 
 function setupTaskTitleHandlers() {
     /*
-        Установка обработчиков для динамически обновленного названия заметок (делегирование событий)
+        Установка обработчиков для заголовка (делегирование событий)
     */
     const headerNameContainer = document.querySelector('#header-name-container');
     if (!headerNameContainer || headerNameContainer.dataset.setup) return;
@@ -143,7 +110,7 @@ function setupTaskTitleHandlers() {
         }
     }, true);
 
-    // Обновление header-name (делегирование событий)
+    // Обновление header-name
     headerNameContainer.addEventListener('submit', async function(event) {
         let form = event.target.closest('.header-form');
         if (!form) return;
@@ -170,26 +137,26 @@ function setupTaskTitleHandlers() {
     });
 }
 
-function setupTaskHandlers() {
+function setupTaskHandlers(containerSelector) {
     /*
-         Установка обработчиков для динамически добавленных заметок (делегирование событий)
+        Установка обработчиков для контейнеров незавершенных/завершенных задач (делегирование событий)
     */
-    const taskContainer = document.querySelector('#task-container');
-    if (!taskContainer || taskContainer.dataset.setup) return;
+    let container = document.querySelector(containerSelector);
+    if (!container || container.dataset.setup) return;
 
     // Помечаем контейнер как обработанный
-    taskContainer.dataset.setup = 'true';
+    container.dataset.setup = 'true';
 
     // Выделение текста при фокусе
-    taskContainer.addEventListener('focus', function (event) {
+    container.addEventListener('focus', function (event) {
         let taskInput = event.target.closest('.task')
         if (taskInput) {
             taskInput.select();
         }
     }, true);
 
-    // Обновление задачи (делегирование событий)
-    taskContainer.addEventListener('submit', async function(event) {
+    // Обновление задачи
+    container.addEventListener('submit', async function(event) {
         let form = event.target.closest('.task-form');
         if (!form) return;
 
@@ -200,18 +167,88 @@ function setupTaskHandlers() {
         let formData = { taskValue: taskInputValue };
 
         let result = await dataTransfer(form, formData, null, null, 'PUT');
+
         if (result && result.task) {
-            // console.log(`Значение заметки TaskId: ${result.task.task_id} обновлено на TaskValue: ${result.task.task_title}`);
             taskInput.value = result.task.task_title;
-        } else {
-            console.error(result.error);
-            alert(result.error || 'Ошибка обновления!');
+            setTimeout(() => taskInput.blur(), 100);
         }
-        setTimeout(() => taskInput.blur(), 100);
     });
 
-    // Удаление задачи (делегирование событий)
-    taskContainer.addEventListener('click', async function (event) {
+    // Обработчик для checkbox
+    container.addEventListener('change', async function(event) {
+        const checkBox = event.target.closest('.task-checkbox');
+        if (!checkBox) return;
+
+        const taskItem = checkBox.closest('.task-item');
+        const isCompleted = checkBox.classList.contains('completed');
+        const url = isCompleted ? checkBox.dataset.incompleteUrl : checkBox.dataset.completeUrl;
+
+        if (checkBox) {
+            try {
+                let response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                let result = await response.json();
+                if (result && result.message) {
+                    const targetContainer = isCompleted
+                        ? document.getElementById('task-container')
+                        : document.getElementById('completed-task-container');
+
+                    // Обновление классов
+                    taskItem.classList.toggle('completed');
+                    checkBox.classList.toggle('completed');
+                    taskItem.querySelector('.task').classList.toggle('completed');
+
+                    // Перемещение элемента
+                    if (targetContainer.id === 'task-container') {
+                        const inputTask = taskItem.querySelector('.task');
+                        const returnedTaskCreatedAt = new Date(inputTask.dataset.createdAt);
+                        const taskItems = Array.from(targetContainer.querySelectorAll('.task-item'))
+                            .filter(item => item !== taskItem)
+                            .sort((a, b) => {
+                                const dateA = new Date(a.querySelector('.task').dataset.createdAt);
+                                const dateB = new Date(b.querySelector('.task').dataset.createdAt);
+                                return dateB - dateA;
+                            })
+
+                        let insertIndex = taskItems.findIndex(item => {
+                            const itemDate = new Date(item.querySelector('.task').dataset.createdAt);
+                            return returnedTaskCreatedAt > itemDate;
+                        })
+
+                        if (insertIndex === -1) {
+                            insertIndex = taskItems.length;
+                        }
+
+                        if (insertIndex < taskItems.length) {
+                            targetContainer.insertBefore(taskItem, taskItems[insertIndex]);
+                        } else {
+                            targetContainer.appendChild(taskItem);
+                        }
+
+                    } else if (targetContainer.id === 'completed-task-container') {
+                        targetContainer.prepend(taskItem);
+                    }
+                    // Обновление видимости контейнера
+                    updateContainerVisibility();
+                } else {
+                    console.error(result.error);
+                    alert(result.error);
+                }
+            } catch (error) {
+                console.error('Ошибка при завершении задачи!');
+                alert('Ошибка при завершении задачи, попробуйте позже!');
+            }
+        }
+    });
+
+    // Удаление задачи
+    container.addEventListener('click', async function (event) {
         let deleteButton = event.target.closest('.delete-task');
         if (deleteButton) {
             let taskElement = deleteButton.closest('.task-item');
@@ -222,20 +259,20 @@ function setupTaskHandlers() {
                     method: 'DELETE',
                     headers: {
                         'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json'
                     }
                 });
 
                 let result = await response.json();
-
                 if (!response.ok) {
-                    console.error(`Ошибка удаления:`, response.status);
-                    if (result.error) {
-                        console.error(result.error);
-                    }
+                    console.error(result.error);
+                    alert(result.error);
+                    return;
                 }
+
                 console.log(result.message);
                 taskElement.remove();
-                checkTasks();
+                updateContainerVisibility();
             } catch (error) {
                 console.error(error);
                 alert('Ошибка при удалении задачи!');
@@ -243,3 +280,84 @@ function setupTaskHandlers() {
         }
     });
 }
+
+function updateContainerVisibility() {
+    const completedContainerWrapper = document.querySelector('.completed-task-container');
+    const messageContainer = document.getElementById('information-message-container');
+
+    // Вывод сообщения о пустых задачах
+    if (document.getElementById('task-container').children.length === 0) {
+        messageContainer.classList.remove('d-none');
+    } else {
+        messageContainer.classList.add('d-none');
+    }
+
+    // Видимость контейнера для завершенных задач
+    if (document.getElementById('completed-task-container').children.length === 0) {
+        completedContainerWrapper.classList.add('d-none');
+    } else {
+        completedContainerWrapper.classList.remove('d-none');
+    }
+}
+
+
+// function moveToCompleted(taskElement) {
+//     /*
+//         Перевод задач в список завершенных
+//     */
+//     taskElement.classList.add('completed');
+//
+//     const checkBox = taskElement.querySelector('.task-checkbox');
+//     const inputTask = taskElement.querySelector('.task');
+//     checkBox.classList.add('completed');
+//     inputTask.classList.add('completed');
+//
+//     const completedTaskWrapper = document.querySelector('.completed-task-container');
+//     const completedTaskContainer = document.querySelector('#completed-task-container');
+//
+//     if (completedTaskWrapper.classList.contains('d-none')) {
+//         completedTaskWrapper.classList.remove('d-none');
+//     }
+//
+//     completedTaskContainer.prepend(taskElement);
+//     checkTasks();
+// }
+//
+// function moveToIncompleted(taskElement) {
+//     /*
+//         Перевод задач в список незавершенных
+//     */
+//     taskElement.classList.remove('completed');
+//
+//     const checkBox = taskElement.querySelector('.task-checkbox');
+//     const inputTask = taskElement.querySelector('.task');
+//     checkBox.classList.remove('completed');
+//     inputTask.classList.remove('completed');
+//
+//     const returnedTaskCreatedAt = inputTask.dataset.createdAt;
+//     const taskContainer = document.querySelector('#task-container');
+//     const taskInputs = taskContainer.querySelectorAll('.task')
+//
+//     for (let i = 0; i < taskInputs.length; i++) {
+//         const taskInputCreatedAt = taskInputs[i].dataset.createdAt;
+//         if (taskInputCreatedAt > returnedTaskCreatedAt) {
+//             taskContainer.insertBefore(taskElement, taskInputs[i].closest('.task-item'));
+//             hideCompletedWrapperIfEmpty();
+//             return;
+//         }
+//     }
+//     taskContainer.appendChild(taskElement);
+//     hideCompletedWrapperIfEmpty();
+// }
+//
+// function hideCompletedWrapperIfEmpty() {
+//     /*
+//         Скрывает блок законченных задач при пустом контейнере
+//     */
+//     const completedTaskWrapper = document.querySelector('.completed-task-container');
+//     const remainingCompletedTasks = completedTaskWrapper.querySelectorAll('.task-item');
+//
+//     if (remainingCompletedTasks.length === 0) {
+//         completedTaskWrapper.classList.add('d-none');
+//     }
+// }
