@@ -1,6 +1,7 @@
 import json
 import uuid
 from typing import Union
+from datetime import timedelta, date
 from django.core.mail import send_mail
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -9,7 +10,6 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
-from datetime import timedelta, date
 from django.conf import settings
 from django.db import IntegrityError
 
@@ -20,27 +20,34 @@ from tools.tools import (get_session_task, get_complete_session_task, session_ta
 
 def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
     if request.method == 'GET':
-        print('Пришел GET запрос в main_view')
         user_header_title = None
         session_task = get_session_task(request)
         complete_session_task = get_complete_session_task(request)
-        print('DEBUG before save:', complete_session_task)
-        print('DEBUG type:', type(complete_session_task))
         if request.user.is_authenticated:
-            print(f'Пришел запрос от авторизованного пользователя - {request.user}')
+            print(f'Пришел GET запрос в main_view от авторизованного пользователя - {request.user}')
             user = request.user
 
             # Перенос сессионных незавершенных задач, при наличии
             if session_task:
-                session_task_transfer(user, session_task)
-                del request.session['session_task']
+                result, errors = session_task_transfer(user, session_task)
+                if errors:
+                    # Логгер
+                    for err in errors:
+                        print(f"Ошибка при переносе сессионных незавершенных задач {err['id']}: {err['error']}")
+                else:
+                    del request.session['session_task']
 
             tasks = Task.objects.filter(user=user).order_by('-created_at')
 
             # Перенос сессионных завершенных задач, при наличии
             if complete_session_task:
-                complete_session_task_transfer(user, complete_session_task)
-                del request.session['complete_session_task']
+                result, errors = complete_session_task_transfer(user, complete_session_task)
+                if errors:
+                    # Логер
+                    for err in errors:
+                        print(f"Ошибка при переносе сессионных заверешенных задач {err['id']}: {err['error']}")
+                else:
+                    del request.session['complete_session_task']
 
             complete_tasks = CompleteTask.objects.filter(user=user).order_by('-completed_at')
 
@@ -48,6 +55,7 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
             header_obj = HeaderTitle.objects.filter(user=user).first()
             user_header_title = header_obj.header_title if header_obj else None
         else:
+            print('Пришел GET запрос в main_view от неавторизованного пользователя')
             # Подготовка и сортировка незавершенных сессионных задач
             session_task_sorted = sorted(
                 session_task.items(),
@@ -70,7 +78,13 @@ def main_view(request: HttpRequest) -> HttpResponse | JsonResponse:
             'user_header_title': user_header_title,
             'date': date.today().strftime('%d/%m/%Y'),
         }
-        return render(request, 'notes/index.html', context=context)
+
+        response = render(request, 'notes/index.html', context=context)
+        # Заголовки против кеширования
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
     return JsonResponse({'error': 'Только GET запросы!'}, status=405)
 
 
@@ -139,11 +153,17 @@ def create_task_view(request: HttpRequest) -> JsonResponse:
                 # Очищаем законченные задачи из сессии
                 del request.session['complete_session_task']
 
-            task = Task.objects.create(user=user, title=new_task)
+            task = Task.objects.create(user=user,
+                                       title=new_task,
+                                       is_completed=False)
+
             task_html = render(request, 'notes/task/task.html', {'task': task}).content.decode('utf-8')
 
             return JsonResponse({'message': f'Задача c task-id: {task.id} и task-title: "{task.title}" успешно создана!',
-                                 'task_html': task_html, 'is_completed': task.is_completed}, status=200)
+                                 'task_html': task_html,
+                                 'is_completed': task.is_completed,
+                                 'created_at': task.created_at.isoformat()
+                                 }, status=200)
 
         # Неавторизованный пользователь
         print('Пришел POST запрос в create_task_view для добавления новой задачи от неавторизованного пользователя')
@@ -184,8 +204,8 @@ def _update_db_task(task_obj: Task, task_value: str) -> Task:
     Обновление задачи(DB)
     """
     task_obj.title = task_value
-    task_obj.updated_at = timezone.now().isoformat()
     task_obj.save()
+    # Логгер для времени обновления
     return task_obj
 
 
@@ -228,7 +248,7 @@ def update_task_view(request: HttpRequest, uuid_task_id) -> JsonResponse:
                                  }, status=200)
 
         # Обновление задачи для неавторизованного пользователя
-        print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от авторизованного пользователя: {request.user}')
+        print(f'Пришел PUT запрос в update_task_view на обновление задачи task-id: {uuid_task_id} от неавторизованного пользователя')
         # Обновление для незавершенной задачи
         str_uuid_task_id = str(uuid_task_id)
         session_task = get_session_task(request)
@@ -322,7 +342,7 @@ def complete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonRes
 
     # Завершение задачи для авторизованного пользователя
     if request.user.is_authenticated:
-        print(f'Пришел запрос в {complete_task_view.__name__} для завершения задачи от авторизованного пользователя!')
+        print(f'Пришел запрос в {complete_task_view.__name__} для завершения задачи от авторизованного пользователя - {request.user}')
         user = request.user
         try:
             task = Task.objects.get(id=uuid_task_id)
@@ -340,7 +360,7 @@ def complete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonRes
                                                         title=task.title,
                                                         created_at=task.created_at,
                                                         updated_at=task.updated_at,
-                                                        completed_at=timezone.now().isoformat(),
+                                                        completed_at=timezone.now(),
                                                         is_completed=True)
         except IntegrityError:
             return JsonResponse({'error': 'Ошибка при завершении задачи!'}, status=404)
@@ -368,7 +388,7 @@ def complete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonRes
     request.session['session_task'] = session_task
     request.session['complete_session_task'] = complete_session_task
 
-    return JsonResponse({'message': 'Задача переведена в список завершенных!'}, status=200)
+    return JsonResponse({'message': 'Задача переведена в список завершенных!', 'is_completed': task['is_completed']}, status=200)
 
 
 def _incomplete_task_for_authenticated_user(user: str, task_id: uuid.UUID):
@@ -402,7 +422,7 @@ def incomplete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonR
             task = Task.objects.create(id=uuid_task_id,
                                        user=complete_task.user,
                                        title=complete_task.title,
-                                       created_at=timezone.now().isoformat(),
+                                       created_at=complete_task.created_at,
                                        updated_at=complete_task.updated_at,
                                        is_completed=False)
         except IntegrityError:
@@ -431,7 +451,7 @@ def incomplete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonR
     request.session['session_task'] = session_task
     request.session['complete_session_task'] = complete_session_task
 
-    return JsonResponse({'message': 'Задача переведена в список незавершенных!'}, status=200)
+    return JsonResponse({'message': 'Задача переведена в список незавершенных!', 'is_completed': task['is_completed']}, status=200)
 
 
 def authorization_view(request: HttpRequest) -> HttpResponse | JsonResponse:

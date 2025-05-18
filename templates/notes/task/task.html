@@ -1,26 +1,25 @@
-<div class="task-item d-flex align-items-center justify-content-between p-3 mb-2 bg-white shadow-sm rounded">
+{% load custom_filters %}
+
+<div class="task-item d-flex align-items-center justify-content-between p-3 mb-2 bg-white shadow-sm rounded {% if task.is_completed %}completed{% endif %}">
     {# Check-Box #}
     <div class="d-flex align-items-center">
         <input type="checkbox"
-               class="task-checkbox me-3"
-               id="checkbox-{{ task.id }}"
+               class="task-checkbox me-3 {% if task.is_completed %}completed{% endif %}"
                data-task-id="{{ task.id }}"
                data-complete-url="{% url 'complete_task' task.id %}"
-               data-incomplete-url="{% url 'incomplete_task' task.id %}">
-        <label for="checkbox-{{ task.id }}" class="visually-hidden"></label>
-        {# Incompleted Task #}
+               data-incomplete-url="{% url 'incomplete_task' task.id %}"
+               {% if task.is_completed %}checked{% endif %}>
+        {# Task #}
         <form class="task-form" data-task-id="{{ task.id }}" data-url="{% url 'update_task' task.id %}">
             {% csrf_token %}
-                <input type="text"
-                    class="task"
-                    id="task-{{ task.id }}"
-                    data-task-id="{{ task.id }}"
-                    name="task-title"
-                    value="{{ task.title }}"
-                    maxlength="50"
-                    autocomplete="off"
-                    data-created-at="{{ task.created_at }}">
-                <label for="task-{{ task.id }}" class="visually-hidden">Task</label>
+            <input type="text"
+                   class="task {% if task.is_completed %}completed{% endif %}"
+                   data-task-id="{{ task.id }}"
+                   name="task-title"
+                   value="{{ task.title }}"
+                   maxlength="50"
+                   autocomplete="off"
+                   data-created-at="{{ task.created_at|isoformat_safe }}">
         </form>
     </div>
     {# Delete Button #}
@@ -28,5 +27,3 @@
         <i class="bi bi-x-circle"></i>
     </button>
 </div>
-
-

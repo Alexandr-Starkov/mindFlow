@@ -93,10 +93,11 @@ def get_complete_session_task(request: HttpRequest) -> dict:
     return request.session.setdefault('complete_session_task', {})
 
 
-def session_task_transfer(user: User, session_tasks: dict):
+def session_task_transfer(user: User, session_tasks: dict) -> Tuple[bool, list[dict[str: str]]]:
     """
     Перевод незавершенных задач из сессии в бд
     """
+    errors = []
     for id_key in session_tasks.keys():
         try:
             task_id = UUID(id_key)
@@ -111,15 +112,22 @@ def session_task_transfer(user: User, session_tasks: dict):
                                 created_at=created_at,
                                 updated_at=updated_at,
                                 is_completed=is_completed)
+
         except Exception as e:
-            print(f"Ошибка при переводе незавершенной задачи из сессии в бд: {e}")
-            return
+            errors.append({
+                'id': id_key,
+                'error': str(e)
+            })
+        if errors:
+            return False, errors
+        return True, []
 
 
-def complete_session_task_transfer(user: User, complete_session_tasks: dict):
+def complete_session_task_transfer(user: User, complete_session_tasks: dict) -> Tuple[bool, list[dict[str: str]]]:
     """
     Перевод завершенных задач из сессии в бд
     """
+    errors = []
     for id_key in complete_session_tasks:
         try:
             task_id = UUID(id_key)
@@ -137,7 +145,13 @@ def complete_session_task_transfer(user: User, complete_session_tasks: dict):
                                         completed_at=completed_at,
                                         is_completed=is_completed)
         except Exception as e:
-            print(f"Ошибка при переводе завершенной задачи из сессии в бд: {e}")
+            errors.append({
+                'id': id_key,
+                'error': str(e)
+            })
+        if errors:
+            return False, errors
+        return True, []
 
 
 def has_permissions(user, user_obj):

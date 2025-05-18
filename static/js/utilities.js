@@ -179,71 +179,82 @@ function setupTaskHandlers(containerSelector) {
         const checkBox = event.target.closest('.task-checkbox');
         if (!checkBox) return;
 
-        const taskItem = checkBox.closest('.task-item');
-        const isCompleted = checkBox.classList.contains('completed');
-        const url = isCompleted ? checkBox.dataset.incompleteUrl : checkBox.dataset.completeUrl;
+        // Блокируем чекбокс на время запроса
+        checkBox.disabled = true;
+        const originalChecked = checkBox.checked;
 
-        if (checkBox) {
-            try {
-                let response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': getCookie('csrftoken'),
-                        'Content-Type': 'application/json'
-                    }
-                });
+        try {
+            const taskItem = checkBox.closest('.task-item');
+            const isCompleting = checkBox.checked;
+            const url = isCompleting ? checkBox.dataset.completeUrl : checkBox.dataset.incompleteUrl;
 
-                let result = await response.json();
-                if (result && result.message) {
-                    const targetContainer = isCompleted
-                        ? document.getElementById('task-container')
-                        : document.getElementById('completed-task-container');
-
-                    // Обновление классов
-                    taskItem.classList.toggle('completed');
-                    checkBox.classList.toggle('completed');
-                    taskItem.querySelector('.task').classList.toggle('completed');
-
-                    // Перемещение элемента
-                    if (targetContainer.id === 'task-container') {
-                        const inputTask = taskItem.querySelector('.task');
-                        const returnedTaskCreatedAt = new Date(inputTask.dataset.createdAt);
-                        const taskItems = Array.from(targetContainer.querySelectorAll('.task-item'))
-                            .filter(item => item !== taskItem)
-                            .sort((a, b) => {
-                                const dateA = new Date(a.querySelector('.task').dataset.createdAt);
-                                const dateB = new Date(b.querySelector('.task').dataset.createdAt);
-                                return dateB - dateA;
-                            })
-
-                        let insertIndex = taskItems.findIndex(item => {
-                            const itemDate = new Date(item.querySelector('.task').dataset.createdAt);
-                            return returnedTaskCreatedAt > itemDate;
-                        })
-
-                        if (insertIndex === -1) {
-                            insertIndex = taskItems.length;
-                        }
-
-                        if (insertIndex < taskItems.length) {
-                            targetContainer.insertBefore(taskItem, taskItems[insertIndex]);
-                        } else {
-                            targetContainer.appendChild(taskItem);
-                        }
-
-                    } else if (targetContainer.id === 'completed-task-container') {
-                        targetContainer.prepend(taskItem);
-                    }
-                    // Обновление видимости контейнера
-                    updateContainerVisibility();
-                } else {
-                    console.error(result.error);
-                    alert(result.error);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json'
                 }
-            } catch (error) {
-                console.error('Ошибка при завершении задачи!');
-                alert('Ошибка при завершении задачи, попробуйте позже!');
+            });
+
+            if (!response.ok) {
+                throw new Error(`Ошибка сервера: ${response.status}`);
             }
+
+            let result;
+
+            try {
+                result = await response.json();
+            } catch (jsonError) {
+                throw new Error('Сервер вернул некорректный ответ');
+            }
+
+            if (!result || result.error) {
+                throw new Error(result?.error || 'Неизвестная ошибка сервера');
+            }
+
+            // Получаем целевой контейнер
+            const targetContainer = isCompleting
+                ? document.getElementById('completed-task-container')
+                : document.getElementById('task-container');
+
+            // Обновляем классы
+            taskItem.classList.toggle('completed', isCompleting);
+            checkBox.classList.toggle('completed', isCompleting);
+            taskItem.querySelector('.task').classList.toggle('completed', isCompleting);
+
+            // Перемещаем элемент
+            if (isCompleting) {
+                // При завершении - добавляем в начало завершённых
+                targetContainer.prepend(taskItem);
+            } else {
+                // При возврате - вставляем на исходную позицию
+                const taskCreatedAt = new Date(taskItem.querySelector('.task').dataset.createdAt);
+                const siblings = Array.from(targetContainer.children)
+                    .filter(item => item !== taskItem);
+
+                let insertBeforeElement = null;
+
+                for (const sibling of siblings) {
+                    const siblingCreatedAt = new Date(sibling.querySelector('.task').dataset.createdAt);
+                    if (taskCreatedAt > siblingCreatedAt) {
+                        insertBeforeElement = sibling;
+                        break;
+                    }
+                }
+
+                if (insertBeforeElement) {
+                    targetContainer.insertBefore(taskItem, insertBeforeElement);
+                } else {
+                    targetContainer.appendChild(taskItem);
+                }
+            }
+            updateContainerVisibility();
+        } catch (error) {
+            console.error('Ошибка:', error);
+            checkBox.checked = originalChecked; // Откатываем состояние
+            alert(error.message);
+        } finally {
+            checkBox.disabled = false;
         }
     });
 
@@ -299,65 +310,3 @@ function updateContainerVisibility() {
         completedContainerWrapper.classList.remove('d-none');
     }
 }
-
-
-// function moveToCompleted(taskElement) {
-//     /*
-//         Перевод задач в список завершенных
-//     */
-//     taskElement.classList.add('completed');
-//
-//     const checkBox = taskElement.querySelector('.task-checkbox');
-//     const inputTask = taskElement.querySelector('.task');
-//     checkBox.classList.add('completed');
-//     inputTask.classList.add('completed');
-//
-//     const completedTaskWrapper = document.querySelector('.completed-task-container');
-//     const completedTaskContainer = document.querySelector('#completed-task-container');
-//
-//     if (completedTaskWrapper.classList.contains('d-none')) {
-//         completedTaskWrapper.classList.remove('d-none');
-//     }
-//
-//     completedTaskContainer.prepend(taskElement);
-//     checkTasks();
-// }
-//
-// function moveToIncompleted(taskElement) {
-//     /*
-//         Перевод задач в список незавершенных
-//     */
-//     taskElement.classList.remove('completed');
-//
-//     const checkBox = taskElement.querySelector('.task-checkbox');
-//     const inputTask = taskElement.querySelector('.task');
-//     checkBox.classList.remove('completed');
-//     inputTask.classList.remove('completed');
-//
-//     const returnedTaskCreatedAt = inputTask.dataset.createdAt;
-//     const taskContainer = document.querySelector('#task-container');
-//     const taskInputs = taskContainer.querySelectorAll('.task')
-//
-//     for (let i = 0; i < taskInputs.length; i++) {
-//         const taskInputCreatedAt = taskInputs[i].dataset.createdAt;
-//         if (taskInputCreatedAt > returnedTaskCreatedAt) {
-//             taskContainer.insertBefore(taskElement, taskInputs[i].closest('.task-item'));
-//             hideCompletedWrapperIfEmpty();
-//             return;
-//         }
-//     }
-//     taskContainer.appendChild(taskElement);
-//     hideCompletedWrapperIfEmpty();
-// }
-//
-// function hideCompletedWrapperIfEmpty() {
-//     /*
-//         Скрывает блок законченных задач при пустом контейнере
-//     */
-//     const completedTaskWrapper = document.querySelector('.completed-task-container');
-//     const remainingCompletedTasks = completedTaskWrapper.querySelectorAll('.task-item');
-//
-//     if (remainingCompletedTasks.length === 0) {
-//         completedTaskWrapper.classList.add('d-none');
-//     }
-// }
