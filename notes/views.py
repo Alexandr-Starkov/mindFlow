@@ -388,7 +388,7 @@ def complete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonRes
     request.session['session_task'] = session_task
     request.session['complete_session_task'] = complete_session_task
 
-    return JsonResponse({'message': 'Задача переведена в список завершенных!', 'is_completed': task['is_completed']}, status=200)
+    return JsonResponse({'message': 'Задача переведена в список завершенных!'}, status=200)
 
 
 def _incomplete_task_for_authenticated_user(user: str, task_id: uuid.UUID):
@@ -451,7 +451,7 @@ def incomplete_task_view(request: HttpRequest, uuid_task_id: uuid.UUID) -> JsonR
     request.session['session_task'] = session_task
     request.session['complete_session_task'] = complete_session_task
 
-    return JsonResponse({'message': 'Задача переведена в список незавершенных!', 'is_completed': task['is_completed']}, status=200)
+    return JsonResponse({'message': 'Задача переведена в список незавершенных!'}, status=200)
 
 
 def authorization_view(request: HttpRequest) -> HttpResponse | JsonResponse:
